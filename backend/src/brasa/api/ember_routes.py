@@ -55,6 +55,7 @@ Resolution = Literal["day", "week", "month"]
 MODIS_START = date(2000, 11, 1)
 VIIRS_FIRST_LIGHT = date(2012, 1, 20)
 HOTSPOT_POINT_CAP = 25_000
+MIN_RING_POINTS = 3
 MIN_STAT_SAMPLES = 2
 DECEMBER = 12
 DAYS_IN_LEAP_YEAR = 366
@@ -1292,7 +1293,7 @@ def _in_bbox(lon: float, lat: float, bbox: tuple[float, float, float, float]) ->
 
 def _point_in_ring(lon: float, lat: float, ring: Sequence[Sequence[float]]) -> bool:
     """Ray-casting point-in-ring test (even-odd rule)."""
-    if len(ring) < 3:
+    if len(ring) < MIN_RING_POINTS:
         return False
     inside = False
     j = len(ring) - 1
@@ -1389,14 +1390,18 @@ def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, buil
         if (
             co_entry is not None
             and _in_bbox(lon, lat, co_entry.bbox)
-            and any(_in_bbox(lon, lat, bb) and _point_in_geometry(lon, lat, g) for bb, g in dept_geoms)
+            and any(
+                _in_bbox(lon, lat, bb) and _point_in_geometry(lon, lat, g) for bb, g in dept_geoms
+            )
         ):
             return {"id": co_entry.id, "name": co_entry.name, "bbox": list(co_entry.bbox)}
-        for entry, geoms in country_geoms:
-            if _in_bbox(lon, lat, entry.bbox) and any(
-                _in_bbox(lon, lat, bb) and _point_in_geometry(lon, lat, g) for bb, g in geoms
-            ):
-                return {"id": entry.id, "name": entry.name, "bbox": list(entry.bbox)}
+        # Countries crossing the antimeridian (USA, Russia, Fiji...) are stored unwrapped in 0..360.
+        for x in (lon, lon + 360.0):
+            for entry, geoms in country_geoms:
+                if _in_bbox(x, lat, entry.bbox) and any(
+                    _in_bbox(x, lat, bb) and _point_in_geometry(x, lat, g) for bb, g in geoms
+                ):
+                    return {"id": entry.id, "name": entry.name, "bbox": list(entry.bbox)}
         raise HTTPException(status_code=404, detail="No country at this point")
 
     @app.get("/api/calendar")
@@ -1582,9 +1587,7 @@ def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> 
         return _build_alerts_overview(ctx, as_of=as_of_key)
 
     @lru_cache(maxsize=128)
-    def _cached_alert(
-        entry_id: str, as_of_key: date | None, recent_stamp: str | None
-    ) -> AlertItem:
+    def _cached_alert(entry_id: str, as_of_key: date | None, recent_stamp: str | None) -> AlertItem:
         _ = recent_stamp
         entry = _resolve_aoi_id(entry_id, ctx.aoi_by_id)
         if entry is None:  # pragma: no cover - validated before cache lookup

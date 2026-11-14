@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from brasa.api.app import create_app
+from brasa.api.ember_routes import _point_in_geometry
 from brasa.api.service import CalendarService, CountryCalendars
 from brasa.config import Settings
 from brasa.ingestion.boundaries import load_departments
@@ -112,6 +113,30 @@ def test_aoi_at_colombia_returns_co(ember_client: TestClient) -> None:
     assert len(body["bbox"]) == 4
 
 
+def test_aoi_at_antimeridian_country_stored_in_0_360() -> None:
+    # The USA geometry crosses the antimeridian and is stored with longitudes in 0..360.
+    months = pd.date_range("2018-01-01", periods=36, freq="MS").strftime("%Y-%m-%d")
+    countries = CountryCalendars.from_monthly(
+        pd.DataFrame(
+            [
+                {"country": "United States", "month": m, "sensor": s, "count": n}
+                for m in months
+                for s, n in (("MODIS", 100), ("VIIRS", 300))
+            ]
+        )
+    )
+    client = TestClient(
+        create_app(
+            Settings(environment="test", data_dir=str(DATA_DIR)),
+            service=CalendarService.from_sample_data(),
+            countries=countries,
+        )
+    )
+    res = client.get("/api/aoi/at", params={"lat": 40.0, "lon": -100.0})
+    assert res.status_code == 200
+    assert res.json()["id"] == "country:united-states"
+
+
 def test_aoi_at_ocean_returns_404(ember_client: TestClient) -> None:
     res = ember_client.get("/api/aoi/at", params={"lat": 0.0, "lon": -30.0})
     assert res.status_code == 404
@@ -123,8 +148,6 @@ def test_aoi_at_out_of_range_returns_422(ember_client: TestClient) -> None:
 
 
 def test_point_in_geometry_respects_hole() -> None:
-    from brasa.api.ember_routes import _point_in_geometry
-
     poly = {
         "type": "Polygon",
         "coordinates": [
@@ -135,4 +158,3 @@ def test_point_in_geometry_respects_hole() -> None:
     assert _point_in_geometry(1.0, 1.0, poly) is True
     assert _point_in_geometry(5.0, 5.0, poly) is False
     assert _point_in_geometry(15.0, 5.0, poly) is False
-
