@@ -133,6 +133,11 @@ class AnalystRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class AlertsOverviewResponse(BaseModel):
+    countries: list[AlertItem]
+    colombia: list[AlertItem]
+
+
 AoiKind = Literal[
     "colombia_all",
     "colombia_box",
@@ -701,6 +706,14 @@ def _select_detections_mask(detections: pd.DataFrame, entry: AoiEntry) -> pd.Ser
     return detections["longitude"].between(w, e) & detections["latitude"].between(s, n)
 
 
+def _bin_dates(dt: pd.Series, resolution: Resolution) -> Any:
+    if resolution == "month":
+        return [date(y, m, 1) for y, m in zip(dt.dt.year, dt.dt.month, strict=False)]
+    if resolution == "week":
+        return (dt - pd.to_timedelta(dt.dt.dayofweek, unit="D")).dt.date
+    return dt.dt.date
+
+
 def _compute_mean_frp_by_date(
     detections: pd.DataFrame,
     entry: AoiEntry,
@@ -725,13 +738,7 @@ def _compute_mean_frp_by_date(
     if sub.empty:
         return {}
     dt = pd.to_datetime(sub["acq_date"])
-    slot: Any
-    if resolution == "month":
-        slot = [date(y, m, 1) for y, m in zip(dt.dt.year, dt.dt.month, strict=False)]
-    elif resolution == "week":
-        slot = (dt - pd.to_timedelta(dt.dt.dayofweek, unit="D")).dt.date
-    else:
-        slot = dt.dt.date
+    slot: Any = _bin_dates(dt, resolution)
     grouped = sub.assign(_slot=slot).groupby("_slot", sort=False)["frp"].mean()
     return {cast(date, k): round(float(v), 1) for k, v in grouped.items() if pd.notna(v)}
 
@@ -795,6 +802,33 @@ def _make_calendar_cell(
     return cell
 
 
+def _merge_nrt_viirs_counts(
+    viirs_map: dict[date, int],
+    *,
+    recent_src: RecentSource | None,
+    entry: AoiEntry,
+    max_data_date: date,
+    req_to: date,
+    resolution: Resolution,
+    base_effective_to: date,
+) -> date:
+    latest_recent = recent_src.get() if recent_src is not None else None
+    if latest_recent is None or latest_recent.points.empty:
+        return base_effective_to
+    pts = latest_recent.points
+    nrt_mask = (pts["acq_date"] > pd.Timestamp(max_data_date)) & _select_detections_mask(pts, entry)
+    nrt_inside = pts.loc[nrt_mask]
+    if nrt_inside.empty:
+        return base_effective_to
+    nrt_max = pd.Timestamp(nrt_inside["acq_date"].max()).date()
+    nrt_slots: Any = _bin_dates(pd.to_datetime(nrt_inside["acq_date"]), resolution)
+    counts = nrt_inside.assign(_slot=nrt_slots).groupby("_slot").size()
+    for slot_key, count in counts.items():
+        k_date = cast(date, slot_key)
+        viirs_map[k_date] = viirs_map.get(k_date, 0) + int(count)
+    return max(base_effective_to, min(req_to, nrt_max))
+
+
 def _colombia_calendar_cells(
     service: CalendarService,
     entry: AoiEntry,
@@ -803,6 +837,7 @@ def _colombia_calendar_cells(
     req_to: date,
     resolution: Resolution,
     frp_map: dict[date, float],
+    recent_src: RecentSource | None = None,
 ) -> tuple[list[dict[str, Any]], SensorRatio]:
     d = service.detections
     mask = _select_detections_mask(d, entry)
@@ -818,22 +853,13 @@ def _colombia_calendar_cells(
         if not agg.empty
         else service.sensor_ratio
     )
-    max_data_date = (
-        pd.Timestamp(d["acq_date"].max()).date() if not d.empty else date(2026, 10, 31)
-    )
+    max_data_date = pd.Timestamp(d["acq_date"].max()).date() if not d.empty else date.today()
     effective_to = min(req_to, max_data_date)
 
     modis_map: dict[date, int] = {}
     viirs_map: dict[date, int] = {}
     if not inside.empty:
-        dt = pd.to_datetime(inside["acq_date"])
-        slot_series: Any
-        if resolution == "month":
-            slot_series = [date(y, m, 1) for y, m in zip(dt.dt.year, dt.dt.month, strict=False)]
-        elif resolution == "week":
-            slot_series = (dt - pd.to_timedelta(dt.dt.dayofweek, unit="D")).dt.date
-        else:
-            slot_series = dt.dt.date
+        slot_series: Any = _bin_dates(pd.to_datetime(inside["acq_date"]), resolution)
         piv = (
             inside.assign(_slot=slot_series)
             .groupby(["_slot", "sensor"], observed=True)
@@ -845,13 +871,23 @@ def _colombia_calendar_cells(
         if "VIIRS" in piv:
             viirs_map = {cast(date, k): int(v) for k, v in piv["VIIRS"].items()}
 
+    viirs_effective_to = _merge_nrt_viirs_counts(
+        viirs_map,
+        recent_src=recent_src,
+        entry=entry,
+        max_data_date=max_data_date,
+        req_to=req_to,
+        resolution=resolution,
+        base_effective_to=effective_to,
+    )
+
     cells: list[dict[str, Any]] = []
     if resolution == "month":
         cur = date(req_from.year, req_from.month, 1)
         end_slot = date(req_to.year, req_to.month, 1)
         while cur <= end_slot:
             obs_modis = MODIS_START <= cur <= effective_to
-            obs_viirs = date(2012, 1, 1) <= cur <= effective_to
+            obs_viirs = date(2012, 1, 1) <= cur <= viirs_effective_to
             m_val = float(modis_map.get(cur, 0)) if obs_modis else None
             is_jan2012 = cur == date(2012, 1, 1)
             v_val = float(viirs_map.get(cur, 0)) if obs_viirs else None
@@ -875,7 +911,7 @@ def _colombia_calendar_cells(
     while cur <= req_to:
         bin_end = cur + timedelta(days=6) if resolution == "week" else cur
         obs_modis = bin_end >= MODIS_START and cur <= effective_to
-        obs_viirs = bin_end >= VIIRS_FIRST_LIGHT and cur <= effective_to
+        obs_viirs = bin_end >= VIIRS_FIRST_LIGHT and cur <= viirs_effective_to
         m_val = float(modis_map.get(cur, 0)) if obs_modis else None
         v_val = float(viirs_map.get(cur, 0)) if obs_viirs else None
         cells.append(
@@ -1297,11 +1333,91 @@ def _register_calendar_and_hotspot_routes(
         return _serialize_hotspots(rows_df)
 
 
+def _evaluate_entry_alert(
+    ctx: _EmberContext,
+    entry: AoiEntry,
+    *,
+    as_of: date | None = None,
+    latest_recent: Any = None,
+) -> AlertItem:
+    rows, _, in_col = _rows_for_entry(ctx, entry)
+    nrt_det: int | None = None
+    nrt_pct: float | None = None
+    if latest_recent is not None and in_col:
+        summary = recent_summary(
+            ctx.service, latest_recent, BoundingBox(*entry.bbox), entry.department
+        )
+        nrt_det = summary.get("detections")
+        nrt_pct = summary.get("percent_of_normal")
+    return evaluate_rows(
+        rows,
+        aoi_id=entry.id,
+        region_name=entry.name,
+        department=entry.department,
+        country=entry.country,
+        in_colombia=in_col,
+        as_of=as_of,
+        nrt_detections=nrt_det,
+        nrt_percent_of_normal=nrt_pct,
+    )
+
+
+def _alert_sort_key(item: AlertItem) -> tuple[int, float, float, str]:
+    return (-item.severity_rank, -item.z_score, -item.anomaly_ratio, item.region_name)
+
+
+def _build_alerts_overview(
+    ctx: _EmberContext, *, as_of: date | None = None
+) -> AlertsOverviewResponse:
+    latest_recent = ctx.recent_src.get() if ctx.recent_src is not None else None
+    country_items: list[AlertItem] = []
+    seen_countries: set[str] = set()
+    colombia_items: list[AlertItem] = []
+
+    for entry in ctx.aoi_ordered:
+        if entry.kind == "colombia_all":
+            if "Colombia" not in seen_countries:
+                seen_countries.add("Colombia")
+                country_items.append(
+                    _evaluate_entry_alert(ctx, entry, as_of=as_of, latest_recent=latest_recent)
+                )
+        elif entry.kind == "country" and entry.country is not None:
+            if entry.country in seen_countries:
+                continue
+            seen_countries.add(entry.country)
+            country_items.append(
+                _evaluate_entry_alert(ctx, entry, as_of=as_of, latest_recent=latest_recent)
+            )
+        elif entry.kind == "department":
+            colombia_items.append(
+                _evaluate_entry_alert(ctx, entry, as_of=as_of, latest_recent=latest_recent)
+            )
+
+    country_items.sort(key=_alert_sort_key)
+    colombia_items.sort(key=_alert_sort_key)
+    return AlertsOverviewResponse(countries=country_items, colombia=colombia_items)
+
+
 def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> None:
+    @lru_cache(maxsize=4)
+    def _cached_overview(
+        as_of_key: date | None, recent_stamp: str | None
+    ) -> AlertsOverviewResponse:
+        _ = recent_stamp
+        return _build_alerts_overview(ctx, as_of=as_of_key)
+
     @app.get("/api/anomalies")
     def api_anomalies(aoi: str = Query(max_length=120)) -> list[dict[str, Any]]:
         cal = build_cal(aoi, "2000-01-01", date.today().isoformat(), "month")
         return _detect_anomalies_from_cells(cal["cells"])
+
+    @app.get("/api/alerts/overview", response_model=AlertsOverviewResponse)
+    def api_alerts_overview(
+        as_of: Annotated[date | None, Query()] = None,
+    ) -> AlertsOverviewResponse:
+        latest = ctx.recent_src.get() if ctx.recent_src is not None else None
+        stamp = latest.fetched_at.isoformat() if latest is not None else None
+        return _cached_overview(as_of, stamp)
 
     @app.get("/api/alerts", response_model=AlertItem)
     def api_alerts(
@@ -1311,28 +1427,8 @@ def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> 
         entry = _resolve_aoi_id(aoi, ctx.aoi_by_id)
         if entry is None:
             raise HTTPException(status_code=404, detail=f"Unknown AOI: {aoi}")
-        rows, _, in_col = _rows_for_entry(ctx, entry)
-        nrt_det: int | None = None
-        nrt_pct: float | None = None
-        if ctx.recent_src is not None and in_col:
-            latest_recent = ctx.recent_src.get()
-            if latest_recent is not None:
-                summary = recent_summary(
-                    ctx.service, latest_recent, BoundingBox(*entry.bbox), entry.department
-                )
-                nrt_det = summary.get("detections")
-                nrt_pct = summary.get("percent_of_normal")
-        return evaluate_rows(
-            rows,
-            aoi_id=entry.id,
-            region_name=entry.name,
-            department=entry.department,
-            country=entry.country,
-            in_colombia=in_col,
-            as_of=as_of,
-            nrt_detections=nrt_det,
-            nrt_percent_of_normal=nrt_pct,
-        )
+        latest = ctx.recent_src.get() if ctx.recent_src is not None else None
+        return _evaluate_entry_alert(ctx, entry, as_of=as_of, latest_recent=latest)
 
     @app.get("/api/satellites/tle")
     def api_satellites_tle() -> list[dict[str, Any]]:
@@ -1436,6 +1532,7 @@ def register_ember_routes(
                 req_to=req_to,
                 resolution=resolution,
                 frp_map=_mean_frp(entry.id, resolution),
+                recent_src=ctx.recent_src,
             )
             eff_res: Resolution = resolution
             dataset_tag: str = ctx.service.dataset

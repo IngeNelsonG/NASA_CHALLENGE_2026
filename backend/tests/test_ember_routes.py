@@ -90,3 +90,15 @@ def test_anomalies_alerts_tle_and_deterministic_analyst_sse(ember_client: TestCl
     assert "text/event-stream" in sse.headers["content-type"]
     assert '"delta":' in sse.text
     assert '"highlights":' in sse.text
+
+
+def test_alerts_overview_returns_country_and_departmental_lists(
+    ember_client: TestClient,
+) -> None:
+    res = ember_client.get("/api/alerts/overview")
+    assert res.status_code == 200
+    body = res.json()
+    assert "countries" in body
+    assert "colombia" in body
+    assert any(c["aoi_id"] == "co" for c in body["countries"])
+    assert len(body["colombia"]) == 33
