@@ -118,14 +118,14 @@ export function SensorDot({ sensor, shape = 'dot' }: { sensor: Sensor; shape?: '
 /** Centred section opener: small uppercase eyebrow, large serif title, optional lead. */
 export function SectionHeading({ id, eyebrow, title, lead }: { id?: string; eyebrow: string; title: string; lead?: ReactNode }) {
   return (
-    <header className="mx-auto mb-10 max-w-4xl text-center lg:mb-16">
+    <header className="mx-auto mb-10 max-w-4xl text-center lg:mb-14">
       <Reveal>
         <p className="eyebrow flex items-center justify-center gap-3">
           <Sparkle className="h-3 w-3 text-ember" />
           {eyebrow}
         </p>
       </Reveal>
-      <h2 id={id} className="mt-5 text-[2.5rem] leading-[1.04] sm:text-6xl lg:text-7xl">
+      <h2 id={id} className="mt-5 text-[2.4rem] leading-[1.05] sm:text-5xl lg:text-6xl">
         <SplitWords text={title} />
       </h2>
       {lead && (

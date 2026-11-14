@@ -36,6 +36,7 @@ from brasa.api.explain import (
     make_openai_compatible_summarizer,
     template_summary,
 )
+from brasa.api.hotspot_sources import FirmsHotspots
 from brasa.api.schemas import (
     CalendarMonth,
     CalendarResponse,
@@ -69,6 +70,7 @@ from brasa.config import Settings, get_settings
 from brasa.domain.models import COLOMBIA, BoundingBox, InvalidBoundingBoxError
 from brasa.harmonization.calibrate import SensorRatio
 from brasa.ingestion.boundaries import geometry_bbox, load_departments, load_world_subdivisions
+from brasa.ingestion.firms_client import FirmsClient
 from brasa.ingestion.recent import RecentDetections, RecentSource, load_static_cells
 
 logger = logging.getLogger(__name__)
@@ -565,9 +567,7 @@ def _alerts_routes(
         """Deterministic unusual-trend early-warning alerts routed to responsible agencies."""
         latest_recent = recent_src.get() if recent_src is not None else None
 
-        def _evaluate_target(
-            target: Target, *, aoi_id: str, region_name: str
-        ) -> AlertItem:
+        def _evaluate_target(target: Target, *, aoi_id: str, region_name: str) -> AlertItem:
             kind, value, sub = target
             rows, _, _ = rows_for(target)
             in_col = kind == "area" or value == "Colombia"
@@ -659,6 +659,15 @@ def _geo_routes(
             raise HTTPException(status_code=422, detail="Unknown country.")
         empty = b'{"type":"FeatureCollection","features":[]}'
         return Response(content=world_maps.get(country, empty), media_type="application/json")
+
+
+def _firms_hotspots(settings: Settings) -> FirmsHotspots | None:
+    """Live FIRMS points for areas outside the local archive; off without a MAP_KEY and in
+    the test environment, which never touches the network."""
+    key = settings.firms_map_key
+    if settings.environment == "test" or key is None or not key.get_secret_value():
+        return None
+    return FirmsHotspots(FirmsClient(key, settings.firms_base_url))
 
 
 def create_app(
@@ -839,6 +848,7 @@ def create_app(
         world_collection=world_features,
         recent_src=recent_src,
         data_dir=data_dir,
+        firms=_firms_hotspots(settings),
     )
 
     return app

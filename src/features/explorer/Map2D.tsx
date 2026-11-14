@@ -78,7 +78,7 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
 
     const draw = () => {
       const { layers, aoi, picked } = useStore.getState();
-      const { hotspots, sats } = useData.getState();
+      const { hotspots, sats, shape, shapeFor } = useData.getState();
       applyTf();
       ctx.clearRect(0, 0, W, H);
       ctx.lineJoin = 'round';
@@ -146,11 +146,20 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
         }
         ctx.globalAlpha = 1;
       }
-      ctx.beginPath();
-      path(bboxPolygon(aoi.bbox));
-      ctx.strokeStyle = '#EAFE07';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+      // real outline when known (rings as closed paths), the box for drawn areas
+      if (shapeFor === aoi.id) {
+        ctx.beginPath();
+        if (shape)
+          for (const ring of shape.rings) {
+            const coords: [number, number][] = [];
+            for (let i = 0; i + 1 < ring.length; i += 2) coords.push([ring[i], ring[i + 1]]);
+            path({ type: 'LineString', coordinates: coords });
+          }
+        else path(bboxPolygon(aoi.bbox));
+        ctx.strokeStyle = '#EAFE07';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
       if (view.draft) {
         ctx.beginPath();
         path(bboxPolygon(view.draft));

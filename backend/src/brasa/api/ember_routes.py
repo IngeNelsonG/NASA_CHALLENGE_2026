@@ -28,6 +28,13 @@ from pydantic import BaseModel, Field
 
 from brasa.alerts.detector import evaluate_rows
 from brasa.alerts.schemas import AlertItem
+from brasa.api.hotspot_sources import (
+    FIRMS_MAX_SPAN_DAYS,
+    ORINOQUIA,
+    FirmsHotspots,
+    hotspot_source,
+    merge_geometries,
+)
 from brasa.api.service import (
     PROCESSED_DETECTIONS,
     CalendarService,
@@ -68,12 +75,32 @@ DETECTION_COLS = [
     "frp",
 ]
 ONSET_MONTH_NAMES_ES = (
-    "enero", "febrero", "marzo", "abril", "mayo", "junio",
-    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
 )
 ONSET_MONTH_NAMES_EN = (
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 )
 
 # Current TLE parameters for the 5 NASA/NOAA fire-monitoring platforms.
@@ -605,9 +632,7 @@ def _detect_anomalies_from_cells(cells: Sequence[Mapping[str, Any]]) -> list[dic
         z = float(run["z"])
         az = abs(z)
         band = (
-            "Extreme"
-            if az >= ANOM_EXTREME_Z
-            else ("Strong" if az >= ANOM_STRONG_Z else "Moderate")
+            "Extreme" if az >= ANOM_EXTREME_Z else ("Strong" if az >= ANOM_STRONG_Z else "Moderate")
         )
         direction = "excess" if z > 0 else "deficit"
         out.append(
@@ -691,16 +716,15 @@ class _EmberContext:
     parquet_path: Path
     export_path: Path | None
     has_parquet: bool
+    firms: FirmsHotspots | None = None
+    department_collection: dict[str, Any] | None = None
+    world_collection: Mapping[str, list[dict[str, Any]]] | None = None
 
 
 def _select_detections_mask(detections: pd.DataFrame, entry: AoiEntry) -> pd.Series:
     if entry.kind == "colombia_all":
         return pd.Series(True, index=detections.index)
-    if (
-        entry.kind == "department"
-        and entry.department is not None
-        and "department" in detections
-    ):
+    if entry.kind == "department" and entry.department is not None and "department" in detections:
         return detections["department"] == entry.department
     w, s, e, n = entry.bbox
     return detections["longitude"].between(w, e) & detections["latitude"].between(s, n)
@@ -785,9 +809,7 @@ def _make_calendar_cell(
     is_transition_month: bool = False,
     frp_val: float | None = None,
 ) -> dict[str, Any]:
-    h, h_lo, h_hi = _modis_equiv_blend(
-        m_val, v_val, ratio, is_transition_month=is_transition_month
-    )
+    h, h_lo, h_hi = _modis_equiv_blend(m_val, v_val, ratio, is_transition_month=is_transition_month)
     cell: dict[str, Any] = {
         "date": cur.isoformat(),
         "modis": m_val,
@@ -905,18 +927,14 @@ def _colombia_calendar_cells(
         return cells, ratio
 
     step = timedelta(days=7 if resolution == "week" else 1)
-    cur = (
-        req_from - timedelta(days=req_from.weekday()) if resolution == "week" else req_from
-    )
+    cur = req_from - timedelta(days=req_from.weekday()) if resolution == "week" else req_from
     while cur <= req_to:
         bin_end = cur + timedelta(days=6) if resolution == "week" else cur
         obs_modis = bin_end >= MODIS_START and cur <= effective_to
         obs_viirs = bin_end >= VIIRS_FIRST_LIGHT and cur <= viirs_effective_to
         m_val = float(modis_map.get(cur, 0)) if obs_modis else None
         v_val = float(viirs_map.get(cur, 0)) if obs_viirs else None
-        cells.append(
-            _make_calendar_cell(cur, m_val, v_val, ratio, frp_val=frp_map.get(cur))
-        )
+        cells.append(_make_calendar_cell(cur, m_val, v_val, ratio, frp_val=frp_map.get(cur)))
         cur += step
     return cells, ratio
 
@@ -954,9 +972,7 @@ def _global_calendar_cells(
         m_val = float(modis_map.get(cur, 0)) if obs_modis else None
         is_jan2012 = cur == date(2012, 1, 1)
         v_val = float(viirs_map.get(cur, 0)) if obs_viirs else None
-        cells.append(
-            _make_calendar_cell(cur, m_val, v_val, ratio, is_transition_month=is_jan2012)
-        )
+        cells.append(_make_calendar_cell(cur, m_val, v_val, ratio, is_transition_month=is_jan2012))
         cur = _next_month_start(cur)
     return cells
 
@@ -1007,9 +1023,7 @@ def _query_hotspots_df(
             nrt_sub = pts.loc[nrt_mask]
             if not nrt_sub.empty:
                 existing_dates = (
-                    set(pd.to_datetime(rows_df["acq_date"]).dt.date)
-                    if not rows_df.empty
-                    else set()
+                    set(pd.to_datetime(rows_df["acq_date"]).dt.date) if not rows_df.empty else set()
                 )
                 nrt_new = nrt_sub[~nrt_sub["acq_date"].dt.date.isin(existing_dates)]
                 if not nrt_new.empty:
@@ -1043,15 +1057,18 @@ def _serialize_hotspots(rows_df: pd.DataFrame) -> list[dict[str, Any]]:
     lons = rows_df["longitude"].to_numpy()
     sensors = rows_df["sensor"].astype(str).to_numpy()
     n_rows = len(rows_df)
-    acq_times = (
-        rows_df["acq_time"].to_numpy() if "acq_time" in rows_df else np.full(n_rows, 1800)
-    )
+    acq_times = rows_df["acq_time"].to_numpy() if "acq_time" in rows_df else np.full(n_rows, 1800)
     sats = (
         rows_df["satellite"].astype(str).to_numpy()
         if "satellite" in rows_df
         else np.full(n_rows, "")
     )
     frps = rows_df["frp"].to_numpy() if "frp" in rows_df else np.full(n_rows, 0.0)
+    acq_dates = (
+        pd.to_datetime(rows_df["acq_date"], errors="coerce").dt.strftime("%Y-%m-%d").to_numpy()
+        if "acq_date" in rows_df
+        else np.full(n_rows, None)
+    )
 
     out: list[dict[str, Any]] = []
     for i in range(n_rows):
@@ -1068,6 +1085,7 @@ def _serialize_hotspots(rows_df: pd.DataFrame) -> list[dict[str, Any]]:
                 "sensor": s_lower,
                 "satellite": _norm_satellite(sats[i], s_raw),
                 "acqTime": _fmt_hhmm(t_int),
+                "acqDate": acq_dates[i] if isinstance(acq_dates[i], str) else None,
                 "frp": frp_val,
                 "confidence": "nominal",
                 "daynight": _local_daynight(t_int, lon),
@@ -1219,9 +1237,7 @@ def _compose_analyst_reply(
             "period (Planck MIR ~4 \u00b5m brightness)."
         )
     if is_enso_q:
-        bullets.append(
-            f"\u2022 ENSO/ONI forcing & current departure: {alert.technical_summary_en}"
-        )
+        bullets.append(f"\u2022 ENSO/ONI forcing & current departure: {alert.technical_summary_en}")
     elif is_alert_q:
         auths = ", ".join(a.code for a in alert.authorities[:4])
         bullets.append(
@@ -1244,9 +1260,7 @@ def _rows_for_entry(
         rows, ratio = ctx.service.calendar_and_ratio_for(COLOMBIA, None)
         return rows, ratio, True
     if entry.kind == "department":
-        rows, ratio = ctx.service.calendar_and_ratio_for(
-            BoundingBox(*entry.bbox), entry.department
-        )
+        rows, ratio = ctx.service.calendar_and_ratio_for(BoundingBox(*entry.bbox), entry.department)
         return rows, ratio, True
     if entry.kind == "colombia_box":
         rows, ratio = ctx.service.calendar_and_ratio_for(BoundingBox(*entry.bbox), None)
@@ -1267,9 +1281,7 @@ def _rows_for_entry(
     return rows, ratio, entry.country == "Colombia"
 
 
-def _register_calendar_and_hotspot_routes(
-    app: FastAPI, ctx: _EmberContext, build_cal: Any
-) -> None:
+def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> None:
     @app.get("/api/aoi/search")
     def api_aoi_search(q: str = Query(default="", max_length=120)) -> list[dict[str, Any]]:
         query = _norm_text(q)
@@ -1323,14 +1335,77 @@ def _register_calendar_and_hotspot_routes(
             ) from exc
         if start_d > end_d:
             raise HTTPException(status_code=422, detail="`from` must not be after `to`.")
-        rows_df = _query_hotspots_df(
-            ctx,
-            area,
-            start_ts=pd.Timestamp(start_d),
-            end_ts_excl=pd.Timestamp(end_d) + pd.Timedelta(days=1),
-            sensor=sensor,
-        )
+        source = hotspot_source(area, start_d, end_d, firms_available=ctx.firms is not None)
+        if source == "firms" and ctx.firms is not None:
+            rows_df = ctx.firms.fetch(area, start_d, end_d)
+            if sensor in {"modis", "viirs"} and not rows_df.empty:
+                rows_df = rows_df[rows_df["sensor"] == sensor.upper()]
+        else:
+            rows_df = _query_hotspots_df(
+                ctx,
+                area,
+                start_ts=pd.Timestamp(start_d),
+                end_ts_excl=pd.Timestamp(end_d) + pd.Timedelta(days=1),
+                sensor=sensor,
+            )
         return _serialize_hotspots(rows_df)
+
+
+def _register_area_routes(app: FastAPI, ctx: _EmberContext) -> None:
+    @app.get("/api/hotspots/coverage")
+    def api_hotspots_coverage(
+        bbox: str = Query(max_length=120),
+        from_str: str = Query(alias="from", max_length=10),
+        to_str: str = Query(alias="to", max_length=10),
+    ) -> dict[str, Any]:
+        """Where the points for this area and span come from, so the UI can explain gaps."""
+        try:
+            area = BoundingBox.parse(bbox)
+            start_d, end_d = date.fromisoformat(from_str), date.fromisoformat(to_str)
+        except (InvalidBoundingBoxError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="Invalid bbox or dates.") from exc
+        return {
+            "source": hotspot_source(area, start_d, end_d, firms_available=ctx.firms is not None),
+            "firmsConfigured": ctx.firms is not None,
+            "maxDays": FIRMS_MAX_SPAN_DAYS,
+        }
+
+    @app.get("/api/aoi/geometry")
+    def api_aoi_geometry(aoi: str = Query(max_length=120)) -> dict[str, Any]:
+        """Real outline of an area (department, subdivision, group). Countries return no
+        geometry: the client draws them from its own Natural Earth country layer."""
+        entry = _resolve_aoi_id(aoi, ctx.aoi_by_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Unknown area.")
+        return {
+            "id": entry.id,
+            "kind": entry.kind,
+            "country": entry.country,
+            "geometry": _entry_geometry(ctx, entry),
+        }
+
+
+def _entry_geometry(ctx: _EmberContext, entry: AoiEntry) -> dict[str, Any] | None:
+    if entry.kind in {"country", "colombia_all"} or entry.id.startswith("bbox:"):
+        return None
+    if entry.geometry is not None:
+        return entry.geometry
+    departments = (ctx.department_collection or {}).get("features", [])
+    if entry.id == "co-orinoquia":
+        return merge_geometries(
+            [f.get("geometry") for f in departments if f["properties"]["name"] in ORINOQUIA]
+        )
+    if entry.department is not None:
+        return merge_geometries(
+            [f.get("geometry") for f in departments if f["properties"]["name"] == entry.department]
+        )
+    if entry.country is not None and entry.subdivisions:
+        feats = (ctx.world_collection or {}).get(entry.country, [])
+        wanted = set(entry.subdivisions)
+        return merge_geometries(
+            [f.get("geometry") for f in feats if str(f["properties"]["name"]) in wanted]
+        )
+    return None
 
 
 def _evaluate_entry_alert(
@@ -1482,6 +1557,7 @@ def register_ember_routes(
     world_collection: Mapping[str, list[dict[str, Any]]],
     recent_src: RecentSource | None,
     data_dir: Path,
+    firms: FirmsHotspots | None = None,
 ) -> None:
     """Register unified /api/* endpoints backed by real NASA FIRMS archives."""
     aoi_by_id, aoi_ordered = _build_aoi_index(department_collection, world_collection, countries)
@@ -1496,6 +1572,9 @@ def register_ember_routes(
         parquet_path=parquet_path,
         export_path=export_path,
         has_parquet=parquet_path.exists(),
+        firms=firms,
+        department_collection=department_collection,
+        world_collection=world_collection,
     )
 
     @lru_cache(maxsize=64)
@@ -1564,4 +1643,6 @@ def register_ember_routes(
         }
 
     _register_calendar_and_hotspot_routes(app, ctx, _build_calendar_payload)
+
+    _register_area_routes(app, ctx)
     _register_intel_routes(app, ctx, _build_calendar_payload)

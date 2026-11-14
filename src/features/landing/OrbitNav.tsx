@@ -7,7 +7,8 @@ import { useStore } from '@/store';
 
 gsap.registerPlugin(ScrollTrigger, MotionPathPlugin);
 
-export const SECTIONS = ['hero', 'problem', 'explore', 'calendar', 'anomalies', 'method', 'transparency', 'analyst', 'team', 'data'] as const;
+/** In page order; the header menu, the footer and this rail all read it. */
+export const SECTIONS = ['hero', 'explore', 'calendar', 'anomalies', 'analyst', 'method', 'transparency', 'team', 'data'] as const;
 const W = 76, H = 520;
 
 function SatIcon({ color }: { color: string }) {

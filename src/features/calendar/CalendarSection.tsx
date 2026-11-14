@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { fmtInt, monthName, useT } from '@/app/i18n';
 import { calendarKey, useCalendar } from '@/app/loaders';
-import { SectionHeading, Segmented, Spinner } from '@/components/ui';
+import { Reveal, Segmented, Sparkle, Spinner, SplitWords } from '@/components/ui';
 import { fireGradientCss, NODATA_BG, NODATA_STROKE, ZERO_COLOR } from '@/lib/colors';
 import { RECORD_START } from '@/lib/env';
 import { todayIso } from '@/lib/geo';
@@ -157,28 +157,52 @@ export default function CalendarSection() {
   const set = useStore((s) => s.set);
   const [table, setTable] = useState(false);
 
-  const q = useCalendar(resolution);
+  const requested = useCalendar(resolution);
   const monthly = useCalendar('month');
   const highlightDates = useMemo(() => highlights.map((h) => h.date), [highlights]);
+  // Outside Colombia the archive only holds monthly totals: a day/week grid would be one thin
+  // stripe per month, so those areas are shown (and exported) by month, with a note.
+  const monthlyOnly = useMemo(() => {
+    const cells = requested.data?.response.aoi.id === aoi.id ? requested.data.response.cells : null;
+    if (!cells || resolution === 'month' || cells.length < 2) return false;
+    const first = cells[0].date, last = cells[cells.length - 1].date;
+    const months = (+last.slice(0, 4) - +first.slice(0, 4)) * 12 + (+last.slice(5, 7) - +first.slice(5, 7)) + 1;
+    return cells.length <= months * 1.05;
+  }, [requested.data, resolution, aoi.id]);
+  const res: Resolution = monthlyOnly ? 'month' : resolution;
+  const q = monthlyOnly ? monthly : requested;
   const data = q.data && q.data.response.aoi.id === aoi.id ? q.data : undefined;
 
   const onSelect = (c: CalendarCell) =>
-    useStore.getState().focusDate(c.date, resolution === 'month' ? 'month' : resolution === 'week' ? 'month' : 'day');
+    useStore.getState().focusDate(c.date, res === 'month' ? 'month' : res === 'week' ? 'month' : 'day');
 
   return (
-    <section id="calendar" className="section" aria-labelledby="calendar-title">
-      <SectionHeading id="calendar-title" eyebrow={t('cal.eyebrow')} title={t('cal.title')} lead={t('cal.lead', { aoi: aoi.name })} />
-      <div className="panel p-4 sm:p-5">
+    // Rendered inside the explorer's dark window, right under the globe: one continuous surface.
+    <section id="calendar" className="relative scroll-mt-24 px-3 pb-6 pt-10 sm:px-6 lg:px-10 lg:pb-10 lg:pt-14 xl:pl-24" aria-labelledby="calendar-title">
+      <header className="mb-6 flex flex-col gap-2 lg:mb-8 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
+        <Reveal>
+          <p className="eyebrow flex items-center gap-3">
+            <Sparkle className="h-3 w-3 text-ember" />
+            {t('cal.eyebrow')}
+          </p>
+          <h2 id="calendar-title" className="mt-3 text-3xl leading-tight sm:text-4xl lg:text-5xl">
+            <SplitWords text={t('cal.title')} />
+          </h2>
+        </Reveal>
+        <Reveal delay={120} className="max-w-xl">
+          <p className="text-sm leading-relaxed text-ink-dim sm:text-[15px]">{t('cal.lead', { aoi: aoi.name })}</p>
+        </Reveal>
+      </header>
+      <div className="rounded-2xl border border-line bg-white/[0.025] p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-3">
           <Segmented<Resolution>
             label={t('cal.resolution')}
-            value={resolution}
+            value={res}
             onChange={(v) => set({ resolution: v })}
-            options={[
-              { value: 'day', label: t('time.day') },
-              { value: 'week', label: t('cal.week') },
-              { value: 'month', label: t('time.month') },
-            ]}
+            options={(monthlyOnly ? (['month'] as const) : (['day', 'week', 'month'] as const)).map((v) => ({
+              value: v,
+              label: t(v === 'week' ? 'cal.week' : v === 'day' ? 'time.day' : 'time.month'),
+            }))}
           />
           <span className="chip border-harmonized/50 text-ink">MODIS + VIIRS · ≈ {t('common.estimate')}</span>
           {q.isFetching && <Spinner label={t('common.loading')} />}
@@ -190,13 +214,18 @@ export default function CalendarSection() {
               type="button"
               className="btn"
               disabled={!data}
-              onClick={() => void downloadCsv({ kind: 'calendar', key: calendarKey(aoi.id, resolution), from: binStart(range.from, resolution), to: range.to }, `calendar_${aoi.id.replace(/[^a-z0-9-]+/gi, '_')}_${resolution}_${range.from}_${range.to}.csv`)}
+              onClick={() => void downloadCsv({ kind: 'calendar', key: calendarKey(aoi.id, res), from: binStart(range.from, res), to: range.to }, `calendar_${aoi.id.replace(/[^a-z0-9-]+/gi, '_')}_${res}_${range.from}_${range.to}.csv`)}
             >
               <span aria-hidden>↓</span> CSV
             </button>
           </span>
         </div>
 
+        {monthlyOnly && (
+          <p role="note" className="mt-4 rounded-lg border border-harmonized/40 bg-harmonized/10 px-3 py-2 text-xs leading-relaxed text-ink">
+            {t('cal.monthly_only')}
+          </p>
+        )}
         <DateFilter range={range} onChange={setCalRange} />
 
         <p className="mt-4 text-xs text-ink-dim">{t('cal.clim_caption')}</p>
@@ -211,7 +240,7 @@ export default function CalendarSection() {
               </div>
             </div>
           ) : data ? (
-            <CalendarCanvas data={data} range={range} resolution={resolution} selectedDate={date} highlightDates={highlightDates} onSelect={onSelect} />
+            <CalendarCanvas data={data} range={range} resolution={res} selectedDate={date} highlightDates={highlightDates} onSelect={onSelect} />
           ) : (
             <div className="grid min-h-[480px] place-items-center">
               <Spinner label={t('common.loading')} />

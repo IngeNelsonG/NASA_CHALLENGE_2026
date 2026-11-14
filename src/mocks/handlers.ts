@@ -140,6 +140,14 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     await sleep(100);
     return jsonRes(anomaliesFor(aoi.bbox));
   }
+  if (route === '/api/aoi/geometry') {
+    const aoi = resolveAoi(q.get('aoi') ?? '');
+    if (!aoi) return jsonRes({ error: 'unknown aoi' }, 404);
+    // the mock gazetteer has boxes only: countries are drawn by the client, the rest keep the box
+    const country = aoi.kind === 'country';
+    return jsonRes({ id: aoi.id, kind: country ? 'country' : 'box', country: country ? aoi.name : null, geometry: null });
+  }
+  if (route === '/api/hotspots/coverage') return jsonRes({ source: 'archive', firmsConfigured: false, maxDays: 62 });
   if (route === '/api/satellites/tle') return jsonRes(tle);
   if (route === '/api/analyst' && init?.method === 'POST') {
     return analystStream(JSON.parse(String(init.body ?? '{}')) as AnalystRequest);

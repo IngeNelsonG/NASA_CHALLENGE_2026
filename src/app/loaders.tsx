@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { RECORD_START } from '@/lib/env';
 import { todayIso } from '@/lib/geo';
 import { buildSats } from '@/lib/satellites';
+import { countryGeometry, ringsOf, toShape } from '@/lib/shape';
 import { simClock } from '@/lib/simClock';
 import type { Resolution } from '@/lib/types';
 import { callWorker } from '@/lib/worker-client';
@@ -45,11 +46,45 @@ export function DataLoaders() {
     }
   }, [tle.data]);
 
-  const range = timelineRange(date, granularity);
-  const hot = useQuery({
-    queryKey: ['hotspots', aoi.bbox.join(','), range.from, range.to],
-    queryFn: () => callWorker('hotspots', { bbox: aoi.bbox, from: range.from, to: range.to, track: true }),
+  // Real outline of the area: departments/subdivisions from the API, countries from the Natural
+  // Earth layer already used for borders. Drawn rectangles and preset boxes have none.
+  const outline = useQuery({
+    queryKey: ['aoi-shape', aoi.id],
+    queryFn: async ({ signal }) => {
+      try {
+        const g = await api.aoiGeometry(aoi.id, signal);
+        if (g.geometry) return toShape(g.geometry);
+        if (g.kind === 'country' || g.kind === 'colombia_all') return toShape(await countryGeometry(g.country ?? aoi.name));
+      } catch {
+        /* unknown to the API (e.g. a drawn box): keep the rectangle */
+      }
+      return null;
+    },
     enabled: phase === 'landing',
+    staleTime: Infinity,
+  });
+  const shapeReady = outline.isFetched;
+  const shape = outline.data ?? null;
+  useEffect(() => {
+    if (!shapeReady) return;
+    useData.setState({ shape, shapeFor: aoi.id });
+    view.kick();
+  }, [shape, shapeReady, aoi.id]);
+
+  const range = timelineRange(date, granularity);
+  const coverage = useQuery({
+    queryKey: ['coverage', aoi.bbox.join(','), range.from, range.to],
+    queryFn: ({ signal }) => api.hotspotsCoverage({ bbox: aoi.bbox, ...range }, signal),
+    enabled: phase === 'landing',
+    placeholderData: keepPreviousData,
+  });
+  useEffect(() => useData.setState({ coverage: coverage.data ?? null }), [coverage.data]);
+
+  const hot = useQuery({
+    queryKey: ['hotspots', aoi.id, aoi.bbox.join(','), range.from, range.to, !!shape],
+    queryFn: () => callWorker('hotspots', { bbox: aoi.bbox, from: range.from, to: range.to, track: true, rings: ringsOf(shape) }),
+    // wait for the outline so the points are clipped once, not fetched twice
+    enabled: phase === 'landing' && shapeReady,
     placeholderData: keepPreviousData,
     gcTime: 60_000,
   });

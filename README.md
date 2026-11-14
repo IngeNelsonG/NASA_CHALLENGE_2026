@@ -44,7 +44,9 @@ Types are in `src/lib/types.ts` and must be matched exactly.
 |---|---|
 | `GET /api/aoi/search?q=` | `AOI[]` |
 | `GET /api/calendar?aoi=&from=&to=&resolution=day\|week\|month` | `CalendarResponse` |
-| `GET /api/hotspots?bbox=W,S,E,N&date=YYYY-MM-DD&sensor=modis\|viirs` | `Hotspot[]` |
+| `GET /api/hotspots?bbox=W,S,E,N&date=YYYY-MM-DD&sensor=modis\|viirs` (or `from`/`to`) | `Hotspot[]` (with optional `acqDate`) |
+| `GET /api/hotspots/coverage?bbox=&from=&to=` | `HotspotCoverage` — where the points come from |
+| `GET /api/aoi/geometry?aoi=` | `AoiGeometry` — real outline of the area (countries come back empty and are drawn from Natural Earth on the client) |
 | `GET /api/anomalies?aoi=` | `Anomaly[]` |
 | `GET /api/satellites/tle` | `TLE[]` |
 | `POST /api/analyst` | SSE stream (see below) |
@@ -59,6 +61,21 @@ Things the frontend assumes beyond the type definitions — please confirm or te
 - **Hotspots for a month or year** are fetched one day at a time (8 requests in parallel) because the contract takes a single `date`. A year is ~730 requests; if that is too heavy, add `from`/`to` to the endpoint and change the loop in `src/lib/data.worker.ts`.
 - **Analyst SSE**: each event is a `data:` line. `{"delta":"text"}` (or `{"text":"…"}`, or plain text) is appended to the answer; the final event is `{"highlights":[{"date","reason"}]}`. `[DONE]` is ignored. The parser is `src/lib/sse.ts`.
 - **TLEs** in `src/mocks/tle.json` are a CelesTrak snapshot from 2026-11-14. The backend should serve fresh ones; positions degrade as a TLE ages.
+
+## Fire points outside Colombia
+
+The backend's point archive (`backend/data/processed/detections.parquet`) only covers Colombia's box; every other country and subdivision is stored as **monthly totals**. So, out of the box:
+
+- Colombia (country, departments, presets): points on the globe, clipped to the real outline.
+- Anywhere else: the calendar works (by month), the left-hand satellite image shows NASA's own fire detections for that day (NASA GIBS, no key), and a note explains that there are no points.
+
+To get **points worldwide**, give the backend a NASA FIRMS MAP_KEY (free, <https://firms.modaps.eosdis.nasa.gov/api/map_key/>) in `backend/.env`:
+
+```
+BRASA_FIRMS_MAP_KEY=your-key
+```
+
+Points outside Colombia are then fetched live from the FIRMS Area API (standard archive for older days, near-real-time for the last ~3 months), cached in memory, for spans up to 62 days (timeline set to *Day* or *Month*). FIRMS allows 5000 requests per 10 minutes per key; one month is ~14 requests.
 
 ## What the mock data is
 

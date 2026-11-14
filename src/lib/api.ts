@@ -1,12 +1,14 @@
 import { API_URL, USE_MOCKS } from './env';
 import type {
   AOI,
+  AoiGeometry,
   AlertAssessment,
   AlertsOverview,
   Anomaly,
   BBox,
   CalendarResponse,
   Hotspot,
+  HotspotCoverage,
   RawSensor,
   Resolution,
   TLE,
@@ -49,6 +51,9 @@ export const api = {
       `/api/hotspots?${qs({ bbox: p.bbox.join(','), from: p.from, to: p.to, sensor: p.sensor ?? 'all' })}`,
       signal,
     ),
+  aoiGeometry: (aoi: string, signal?: AbortSignal) => json<AoiGeometry>(`/api/aoi/geometry?${qs({ aoi })}`, signal),
+  hotspotsCoverage: (p: { bbox: BBox; from: string; to: string }, signal?: AbortSignal) =>
+    json<HotspotCoverage>(`/api/hotspots/coverage?${qs({ bbox: p.bbox.join(','), from: p.from, to: p.to })}`, signal),
   anomalies: (aoi: string, signal?: AbortSignal) => json<Anomaly[]>(`/api/anomalies?${qs({ aoi })}`, signal),
   alerts: (aoi: string, signal?: AbortSignal) => json<AlertAssessment>(`/api/alerts?${qs({ aoi })}`, signal),
   alertsOverview: (signal?: AbortSignal) => json<AlertsOverview>('/api/alerts/overview', signal),

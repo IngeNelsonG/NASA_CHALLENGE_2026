@@ -5,9 +5,11 @@ import { BufferAttribute, BufferGeometry, type LineSegments, type Mesh } from 't
 import { mesh as topoMesh } from 'topojson-client';
 import type { GeometryCollection } from 'topojson-specification';
 import { latLonToXYZ } from '@/lib/geo';
+import type { Shape } from '@/lib/shape';
 import type { BBox } from '@/lib/types';
 import { loadWorld } from '@/lib/world';
 import { useStore } from '@/store';
+import { useData } from '@/store/data';
 import { view } from './view';
 
 /** Country borders as one LineSegments draw call. */
@@ -60,17 +62,38 @@ function bboxRing(b: BBox, r = 1.002): [number, number, number][] {
   return pts;
 }
 
-/** AOI outline, the rectangle being drawn, and the picked-point marker. */
+/** Outline rings as segment pairs on the sphere; long edges are split so they follow the curve. */
+function shapeSegments(shape: Shape, r = 1.0022): [number, number, number][] {
+  const out: [number, number, number][] = [];
+  for (const ring of shape.rings) {
+    for (let i = 0; i + 3 < ring.length; i += 2) {
+      const x0 = ring[i], y0 = ring[i + 1], x1 = ring[i + 2], y1 = ring[i + 3];
+      const n = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / 1.5));
+      for (let k = 0; k < n; k++) {
+        out.push(
+          latLonToXYZ(y0 + ((y1 - y0) * k) / n, x0 + ((x1 - x0) * k) / n, r),
+          latLonToXYZ(y0 + ((y1 - y0) * (k + 1)) / n, x0 + ((x1 - x0) * (k + 1)) / n, r),
+        );
+      }
+    }
+  }
+  return out;
+}
+
+/** AOI outline (real boundary, or the box for drawn areas), the rectangle being drawn, and the picked-point marker. */
 export function AoiOverlay() {
   const bbox = useStore((s) => s.aoi.bbox);
   const picked = useStore((s) => s.picked);
   const { invalidate } = useThree();
-  const points = useMemo(() => bboxRing(bbox), [bbox]);
+  const aoiId = useStore((s) => s.aoi.id);
+  const shape = useData((s) => (s.shapeFor === aoiId ? s.shape : null));
+  const shapePending = useData((s) => s.shapeFor !== aoiId);
+  const points = useMemo(() => (shape ? shapeSegments(shape) : bboxRing(bbox)), [shape, bbox]);
   const marker = useRef<Mesh>(null);
   const draft = useRef<LineSegments>(null);
   const draftKey = useRef('');
 
-  useEffect(() => invalidate(), [bbox, picked, invalidate]);
+  useEffect(() => invalidate(), [points, picked, shapePending, invalidate]);
 
   useEffect(() => {
     if (!marker.current || !picked) return;
@@ -97,7 +120,10 @@ export function AoiOverlay() {
 
   return (
     <>
-      <Line points={points} color="#EAFE07" lineWidth={1.6} transparent opacity={0.9} depthWrite={false} />
+      {/* hidden until the outline is known, so a country never flashes as a big rectangle */}
+      {!shapePending && points.length > 1 && (
+        <Line key={shape ? 'shape' : 'box'} points={points} segments={!!shape} color="#EAFE07" lineWidth={1.6} transparent opacity={0.9} depthWrite={false} />
+      )}
       <lineSegments ref={draft} visible={false}>
         <bufferGeometry />
         <lineBasicMaterial color="#ffffff" transparent opacity={0.9} depthTest={false} />

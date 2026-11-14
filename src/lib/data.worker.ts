@@ -3,12 +3,14 @@
 import { api } from './api';
 import { USE_MOCKS } from './env';
 import { DAY_MS, DEG, dayIdx, isoDay, latLonToXYZ } from './geo';
+import { inShape, shapeFromRings } from './shape';
 import type { BBox, CalendarData, Hotspot, HotspotBuffers, RawSensor, Resolution, Sensor } from './types';
 
 export type WorkerApi = {
   calendar: (p: { aoi: string; from: string; to: string; resolution: Resolution }) => CalendarData;
   /** `track` marks the result as "what the globe is showing" for CSV export */
-  hotspots: (p: { bbox: BBox; from: string; to: string; track?: boolean }) => HotspotBuffers;
+  /** `rings`: real outline of the area; points outside it are dropped (the API filters by bbox) */
+  hotspots: (p: { bbox: BBox; from: string; to: string; track?: boolean; rings?: number[][] | null }) => HotspotBuffers;
   /** `key` = `${aoiId}|${resolution}` of a calendar already loaded */
   csv: (p: CsvRequest) => string;
 };
@@ -79,8 +81,10 @@ function hexbin(points: Hotspot[], bbox: BBox, nM: number, nV: number) {
   return { hex, hexRadiusDeg: R };
 }
 
-async function hotspots(p: { bbox: BBox; from: string; to: string; track?: boolean }): Promise<HotspotBuffers> {
-  const all: Hotspot[] = [];
+const dayOf = (h: Hotspot) => h.acqDate ?? (h.acqTime.length > 10 ? h.acqTime.slice(0, 10) : null);
+
+async function hotspots(p: { bbox: BBox; from: string; to: string; track?: boolean; rings?: number[][] | null }): Promise<HotspotBuffers> {
+  let all: Hotspot[] = [];
   if (!USE_MOCKS) {
     const rows = await api.hotspotsRange({ bbox: p.bbox, from: p.from, to: p.to, sensor: 'all' });
     for (const r of rows) all.push(r);
@@ -95,7 +99,19 @@ async function hotspots(p: { bbox: BBox; from: string; to: string; track?: boole
       for (const r of rows) all.push(r);
     });
   }
+  if (p.rings?.length) {
+    const shape = shapeFromRings(p.rings);
+    if (shape) all = all.filter((h) => inShape(shape, h.lon, h.lat));
+  }
   if (p.track) lastHotspots = all;
+
+  const perDay = new Map<string, number>();
+  for (const h of all) {
+    const d = dayOf(h);
+    if (d) perDay.set(d, (perDay.get(d) ?? 0) + 1);
+  }
+  let peakDay: string | null = null;
+  for (const [d, c] of perDay) if (!peakDay || c > (perDay.get(peakDay) ?? 0)) peakDay = d;
 
   const n = all.length;
   const lonlat = new Float32Array(n * 2), xyz = new Float32Array(n * 3), sensor = new Float32Array(n), frp = new Float32Array(n);
@@ -113,7 +129,7 @@ async function hotspots(p: { bbox: BBox; from: string; to: string; track?: boole
     if (isM) nModis++;
     frp[i] = h.frp;
   }
-  return { count: n, nModis, nViirs: n - nModis, lonlat, xyz, sensor, frp, ...hexbin(all, p.bbox, nModis, n - nModis) };
+  return { count: n, nModis, nViirs: n - nModis, lonlat, xyz, sensor, frp, peakDay, ...hexbin(all, p.bbox, nModis, n - nModis) };
 }
 
 function csv(p: CsvRequest): string {
@@ -123,8 +139,8 @@ function csv(p: CsvRequest): string {
     const v = (x: number | null | undefined) => (x === null || x === undefined ? '' : String(x));
     return [head, ...rows.map((c) => [c.date, v(c.modis), v(c.viirs), v(c.harmonized), v(c.harmonizedLow), v(c.harmonizedHigh), v(c.frp), v(c.anomalyZ)].join(','))].join('\n');
   }
-  const head = 'lat,lon,sensor,satellite,acq_time,frp_mw,confidence,daynight';
-  return [head, ...lastHotspots.map((h) => [h.lat, h.lon, h.sensor, h.satellite, h.acqTime, h.frp, h.confidence, h.daynight].join(','))].join('\n');
+  const head = 'lat,lon,sensor,satellite,acq_date,acq_time,frp_mw,confidence,daynight';
+  return [head, ...lastHotspots.map((h) => [h.lat, h.lon, h.sensor, h.satellite, dayOf(h) ?? '', h.acqTime, h.frp, h.confidence, h.daynight].join(','))].join('\n');
 }
 
 const handlers = { calendar, hotspots, csv: async (p: CsvRequest) => csv(p) };

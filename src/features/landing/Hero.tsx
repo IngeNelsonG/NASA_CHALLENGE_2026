@@ -84,7 +84,7 @@ export function Hero() {
             <br />
             2000 →
           </p>
-          <a href="#statement" className="pointer-events-auto mx-auto flex flex-col items-center gap-1 py-1 text-sm text-cream">
+          <a href="#explore" className="pointer-events-auto mx-auto flex flex-col items-center gap-1 py-1 text-sm text-cream">
             <RollText>{t('hero.discover')}</RollText>
             <span aria-hidden className="bob">↓</span>
           </a>

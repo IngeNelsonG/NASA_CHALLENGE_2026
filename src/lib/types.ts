@@ -8,6 +8,15 @@ export type BBox = [west: number, south: number, east: number, north: number];
 // GET /api/aoi/search?q=boyaca
 export type AOI = { id: string; name: string; bbox: BBox; geometry?: GeoJSON.Geometry };
 
+// GET /api/aoi/geometry?aoi=ID — real outline; countries come back without geometry (drawn
+// from the client's Natural Earth layer) and custom boxes keep their rectangle.
+export type AoiGeometry = { id: string; kind: string; country: string | null; geometry: GeoJSON.Geometry | null };
+
+// GET /api/hotspots/coverage?bbox=&from=&to= — where the points for an area come from.
+//   archive: local point archive (Colombia) · firms: live NASA FIRMS · partial: only the part inside
+//   the archive · too_long: span longer than maxDays for FIRMS · none: no point source available
+export type HotspotCoverage = { source: 'archive' | 'firms' | 'partial' | 'too_long' | 'none'; firmsConfigured: boolean; maxDays: number };
+
 // GET /api/calendar?aoi=ID&from=2000-01-01&to=2026-11-14&resolution=day|week|month
 export type CalendarCell = {
   date: string; // ISO
@@ -35,6 +44,8 @@ export type Hotspot = {
   sensor: RawSensor;
   satellite: string;
   acqTime: string;
+  /** YYYY-MM-DD (optional; range queries need it to tell days apart) */
+  acqDate?: string | null;
   frp: number;
   confidence: string;
   daynight: 'D' | 'N';
@@ -123,6 +134,8 @@ export type HotspotBuffers = {
   /** [lon, lat, value01] triplets, sensor-balanced relative density */
   hex: Float32Array;
   hexRadiusDeg: number;
+  /** day with the most detections in the window (null when unknown) */
+  peakDay: string | null;
 };
 
 export type CalendarData = {
