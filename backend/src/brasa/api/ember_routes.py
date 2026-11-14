@@ -1286,7 +1286,84 @@ def _recent_stamp(ctx: _EmberContext) -> str | None:
     return latest.fetched_at.isoformat() if latest is not None else None
 
 
+def _in_bbox(lon: float, lat: float, bbox: tuple[float, float, float, float]) -> bool:
+    return bbox[0] <= lon <= bbox[2] and bbox[1] <= lat <= bbox[3]
+
+
+def _point_in_ring(lon: float, lat: float, ring: Sequence[Sequence[float]]) -> bool:
+    """Ray-casting point-in-ring test (even-odd rule)."""
+    if len(ring) < 3:
+        return False
+    inside = False
+    j = len(ring) - 1
+    for i, pt in enumerate(ring):
+        xi, yi = pt[0], pt[1]
+        xj, yj = ring[j][0], ring[j][1]
+        if (yi > lat) != (yj > lat):
+            x_intersect = (xj - xi) * (lat - yi) / (yj - yi) + xi
+            if lon < x_intersect:
+                inside = not inside
+        j = i
+    return inside
+
+
+def _point_in_polygon_rings(
+    lon: float, lat: float, rings: Sequence[Sequence[Sequence[float]]]
+) -> bool:
+    if not rings or not _point_in_ring(lon, lat, rings[0]):
+        return False
+    return not any(_point_in_ring(lon, lat, hole) for hole in rings[1:])
+
+
+def _point_in_geometry(lon: float, lat: float, geom: Mapping[str, Any] | None) -> bool:
+    """Return True if (lon, lat) lies inside a GeoJSON Polygon or MultiPolygon."""
+    if not geom:
+        return False
+    gtype = geom.get("type")
+    coords = geom.get("coordinates")
+    if not coords:
+        return False
+    if gtype == "Polygon":
+        return _point_in_polygon_rings(lon, lat, coords)
+    if gtype == "MultiPolygon":
+        return any(_point_in_polygon_rings(lon, lat, poly) for poly in coords)
+    return False
+
+
+def _feature_geoms(
+    features: Sequence[Mapping[str, Any]],
+) -> list[tuple[tuple[float, float, float, float], Mapping[str, Any]]]:
+    out: list[tuple[tuple[float, float, float, float], Mapping[str, Any]]] = []
+    for feat in features:
+        geom = feat.get("geometry")
+        if geom:
+            out.append((_parse_bbox_str(geometry_bbox(geom)), geom))
+    return out
+
+
+def _build_aoi_lookup(
+    ctx: _EmberContext,
+) -> tuple[
+    list[tuple[tuple[float, float, float, float], Mapping[str, Any]]],
+    list[tuple[AoiEntry, list[tuple[tuple[float, float, float, float], Mapping[str, Any]]]]],
+]:
+    dept_geoms = _feature_geoms((ctx.department_collection or {}).get("features", []))
+    world = ctx.world_collection or {}
+    countries: list[
+        tuple[AoiEntry, list[tuple[tuple[float, float, float, float], Mapping[str, Any]]]]
+    ] = []
+    for entry in ctx.aoi_ordered:
+        if entry.kind == "country" and entry.country:
+            geoms = _feature_geoms(world.get(entry.country, ()))
+            if geoms:
+                countries.append((entry, geoms))
+    return dept_geoms, countries
+
+
 def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> None:
+    dept_geoms, country_geoms = _build_aoi_lookup(ctx)
+    co_entry = ctx.aoi_by_id.get("co")
+
     @app.get("/api/aoi/search")
     def api_aoi_search(q: str = Query(default="", max_length=120)) -> list[dict[str, Any]]:
         query = _norm_text(q)
@@ -1303,6 +1380,24 @@ def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, buil
                     contains.append(entry)
             hits = (starts + contains)[:12]
         return [{"id": e.id, "name": e.name, "bbox": list(e.bbox)} for e in hits]
+
+    @app.get("/api/aoi/at")
+    def api_aoi_at(
+        lat: float = Query(..., ge=-90.0, le=90.0),
+        lon: float = Query(..., ge=-180.0, le=180.0),
+    ) -> dict[str, Any]:
+        if (
+            co_entry is not None
+            and _in_bbox(lon, lat, co_entry.bbox)
+            and any(_in_bbox(lon, lat, bb) and _point_in_geometry(lon, lat, g) for bb, g in dept_geoms)
+        ):
+            return {"id": co_entry.id, "name": co_entry.name, "bbox": list(co_entry.bbox)}
+        for entry, geoms in country_geoms:
+            if _in_bbox(lon, lat, entry.bbox) and any(
+                _in_bbox(lon, lat, bb) and _point_in_geometry(lon, lat, g) for bb, g in geoms
+            ):
+                return {"id": entry.id, "name": entry.name, "bbox": list(entry.bbox)}
+        raise HTTPException(status_code=404, detail="No country at this point")
 
     @app.get("/api/calendar")
     def api_calendar(

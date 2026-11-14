@@ -95,7 +95,7 @@ export const en = {
   'aoi.current': 'Current area',
   'aoi.draw': 'Draw rectangle',
   'aoi.drawing': 'Drag on the map…',
-  'aoi.or_click': 'Or click any point on the globe to inspect it and use its surroundings as the area.',
+  'aoi.or_click': 'Or click any country on the globe or map to select it, or click elsewhere to inspect that point.',
 
   'globe.aria': 'Interactive globe. Drag to rotate, arrow keys to move, plus and minus to zoom, Enter to inspect the centre point.',
   'globe.help': 'Drag to rotate. Double-click to centre. Click the globe once to enable scroll zoom.',

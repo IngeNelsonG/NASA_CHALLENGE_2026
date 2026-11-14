@@ -42,6 +42,8 @@ const json = async <T>(path: string, signal?: AbortSignal) => (await apiFetch(pa
 
 export const api = {
   searchAoi: (q: string, signal?: AbortSignal) => json<AOI[]>(`/api/aoi/search?${qs({ q })}`, signal),
+  aoiAt: (lat: number, lon: number, signal?: AbortSignal) =>
+    json<AOI>(`/api/aoi/at?${qs({ lat: String(lat), lon: String(lon) })}`, signal),
   calendar: (p: { aoi: string; from: string; to: string; resolution: Resolution }, signal?: AbortSignal) =>
     json<CalendarResponse>(`/api/calendar?${qs(p)}`, signal),
   hotspots: (p: { bbox: BBox; date: string; sensor: RawSensor }, signal?: AbortSignal) =>

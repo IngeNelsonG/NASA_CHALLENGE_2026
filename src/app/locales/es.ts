@@ -97,7 +97,7 @@ export const es: Record<keyof typeof en, string> = {
   'aoi.current': 'Área actual',
   'aoi.draw': 'Dibujar rectángulo',
   'aoi.drawing': 'Arrastra sobre el mapa…',
-  'aoi.or_click': 'O haz clic en cualquier punto del globo para inspeccionarlo y usar su entorno como área.',
+  'aoi.or_click': 'O haz clic en cualquier país del globo o mapa para seleccionarlo, o en otro punto para inspeccionarlo.',
 
   'globe.aria': 'Globo interactivo. Arrastra para rotar, flechas para mover, más y menos para acercar, Enter para inspeccionar el centro.',
   'globe.help': 'Arrastra para rotar. Doble clic para centrar. Haz clic una vez en el globo para activar el zoom con la rueda.',

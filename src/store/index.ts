@@ -1,8 +1,31 @@
 import { create } from 'zustand';
+import { api } from '@/lib/api';
 import { bboxCenter, bboxSpan, clamp, todayIso } from '@/lib/geo';
 import { RECORD_START } from '@/lib/env';
 import type { AnalystHighlight, AOI, Resolution } from '@/lib/types';
 import { view } from '@/scenes/view';
+
+let selectSeq = 0;
+let selectCtrl: AbortController | null = null;
+
+/** Select country AOI at clicked coordinates, falling back to point inspection on 404/error. */
+export async function selectAt(hit: { lat: number; lon: number }): Promise<void> {
+  const seq = ++selectSeq;
+  selectCtrl?.abort();
+  const ctrl = new AbortController();
+  selectCtrl = ctrl;
+  try {
+    const aoi = await api.aoiAt(hit.lat, hit.lon, ctrl.signal);
+    if (seq !== selectSeq || ctrl.signal.aborted) return;
+    if (aoi && typeof aoi.id === 'string' && Array.isArray(aoi.bbox)) {
+      useStore.getState().setAoi(aoi, false);
+      return;
+    }
+  } catch {
+    if (seq !== selectSeq || ctrl.signal.aborted) return;
+  }
+  useStore.getState().set({ picked: hit });
+}
 
 export type Lang = 'en' | 'es';
 export type Granularity = 'day' | 'month' | 'year';

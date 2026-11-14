@@ -10,7 +10,7 @@ import type { BBox } from '@/lib/types';
 import { loadWorld } from '@/lib/world';
 import { toBBox } from '@/scenes/useGlobeStage';
 import { view } from '@/scenes/view';
-import { useStore } from '@/store';
+import { selectAt, useStore } from '@/store';
 import { useData } from '@/store/data';
 
 const bboxPolygon = (b: BBox): GeoJSON.Polygon => {
@@ -308,7 +308,7 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
           store.getState().set({ tool: 'pan' });
         } else if (d.moved < 6) {
           const hit = geo(e);
-          if (hit) store.getState().set({ picked: hit });
+          if (hit) void selectAt(hit);
         }
         mark();
       };

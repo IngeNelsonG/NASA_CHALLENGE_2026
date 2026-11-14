@@ -102,3 +102,37 @@ def test_alerts_overview_returns_country_and_departmental_lists(
     assert "colombia" in body
     assert any(c["aoi_id"] == "co" for c in body["countries"])
     assert len(body["colombia"]) == 33
+
+
+def test_aoi_at_colombia_returns_co(ember_client: TestClient) -> None:
+    res = ember_client.get("/api/aoi/at", params={"lat": 4.65, "lon": -74.08})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["id"] == "co"
+    assert len(body["bbox"]) == 4
+
+
+def test_aoi_at_ocean_returns_404(ember_client: TestClient) -> None:
+    res = ember_client.get("/api/aoi/at", params={"lat": 0.0, "lon": -30.0})
+    assert res.status_code == 404
+
+
+def test_aoi_at_out_of_range_returns_422(ember_client: TestClient) -> None:
+    res = ember_client.get("/api/aoi/at", params={"lat": 95.0, "lon": 0.0})
+    assert res.status_code == 422
+
+
+def test_point_in_geometry_respects_hole() -> None:
+    from brasa.api.ember_routes import _point_in_geometry
+
+    poly = {
+        "type": "Polygon",
+        "coordinates": [
+            [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]],
+            [[3.0, 3.0], [7.0, 3.0], [7.0, 7.0], [3.0, 7.0], [3.0, 3.0]],
+        ],
+    }
+    assert _point_in_geometry(1.0, 1.0, poly) is True
+    assert _point_in_geometry(5.0, 5.0, poly) is False
+    assert _point_in_geometry(15.0, 5.0, poly) is False
+

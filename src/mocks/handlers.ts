@@ -117,6 +117,9 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     await sleep(120);
     return jsonRes(searchAois(q.get('q') ?? ''));
   }
+  if (route === '/api/aoi/at') {
+    return jsonRes({ detail: 'No country at this point' }, 404);
+  }
   if (route === '/api/calendar') {
     const aoi = resolveAoi(q.get('aoi') ?? '');
     if (!aoi) return jsonRes({ error: 'unknown aoi' }, 404);

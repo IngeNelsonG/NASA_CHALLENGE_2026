@@ -1,7 +1,7 @@
 import { useEffect, type RefObject } from 'react';
 import { bboxId, clamp, wrapLon } from '@/lib/geo';
 import type { BBox } from '@/lib/types';
-import { useStore } from '@/store';
+import { selectAt, useStore } from '@/store';
 import { view, type StageLayout } from './view';
 
 /**
@@ -120,7 +120,7 @@ export function useGlobeStage(ref: RefObject<HTMLElement>, id: string, opts: { i
       }
       if (d.moved < 6 && performance.now() - d.t < 500) {
         const hit = view.pick?.(e.clientX, e.clientY);
-        if (hit) store.getState().set({ picked: hit });
+        if (hit) void selectAt(hit);
       }
     };
 
