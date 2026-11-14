@@ -135,7 +135,6 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
       if (hotspots) {
         const size = clamp(1.2 + tf.k * 0.12, 1.5, 6);
         for (const pass of [0, 1] as const) {
-          if (!(pass === 0 ? layers.modis : layers.viirs)) continue;
           ctx.fillStyle = pass === 0 ? SENSOR_COLOR.modis : SENSOR_COLOR.viirs;
           ctx.globalAlpha = 0.85;
           const s = pass === 0 ? size : size * 0.6;

@@ -3,6 +3,7 @@ import { calendarKey } from '@/app/loaders';
 import { SectionHeading } from '@/components/ui';
 import { APP_NAME, USE_MOCKS } from '@/lib/env';
 import { downloadCsv } from '@/lib/worker-client';
+import { binStart } from '@/features/calendar/CalendarCanvas';
 import { timelineRange, useStore } from '@/store';
 import { useData } from '@/store/data';
 
@@ -18,6 +19,7 @@ export function Credits() {
   const t = useT();
   const aoi = useStore((s) => s.aoi);
   const resolution = useStore((s) => s.resolution);
+  const calRange = useStore((s) => s.calRange);
   const date = useStore((s) => s.date);
   const granularity = useStore((s) => s.granularity);
   const count = useData((s) => s.hotspots?.count ?? 0);
@@ -46,9 +48,11 @@ export function Credits() {
           <h3 className="text-lg font-semibold">{t('data.download')}</h3>
           <p className="mt-2 text-sm text-ink-dim">{t('data.download_lead')}</p>
           <div className="mt-4 flex flex-col gap-2">
-            <button type="button" className="btn justify-between" onClick={() => void downloadCsv({ kind: 'calendar', key: calendarKey(aoi.id, resolution) }, `calendar_${slug}_${resolution}.csv`)}>
+            <button type="button" className="btn justify-between" onClick={() => void downloadCsv({ kind: 'calendar', key: calendarKey(aoi.id, resolution), from: binStart(calRange.from, resolution), to: calRange.to }, `calendar_${slug}_${resolution}_${calRange.from}_${calRange.to}.csv`)}>
               <span>{t('data.csv_calendar', { aoi: aoi.name })}</span>
-              <span className="data text-xs text-ink-dim">{resolution} · CSV ↓</span>
+              <span className="data text-xs text-ink-dim">
+                {calRange.from} → {calRange.to} · {resolution} · CSV ↓
+              </span>
             </button>
             <button type="button" className="btn justify-between" disabled={!count} onClick={() => void downloadCsv({ kind: 'hotspots' }, `hotspots_${slug}_${range.from}_${range.to}.csv`)}>
               <span>{t('data.csv_hotspots')}</span>

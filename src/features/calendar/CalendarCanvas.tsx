@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { fmtDay, fmtInt, fmtMonth, monthName, useT } from '@/app/i18n';
 import { fireColor, noDataPattern, SENSOR_COLOR } from '@/lib/colors';
 import { doyOf, yearStartIdx } from '@/lib/geo';
-import type { CalendarCell, CalendarData, Resolution, Sensor } from '@/lib/types';
-import { useStore } from '@/store';
+import type { CalendarCell, CalendarData, Resolution } from '@/lib/types';
+import { useStore, type DateRange } from '@/store';
 
-const Y0 = 2000;
+/** Both sensors are always combined: the grid shows the harmonized series, the tooltip shows each sensor. */
+const SERIES = 'harmonized' as const;
 const COLS: Record<Resolution, number> = { day: 366, week: 53, month: 12 };
 const GUTTER_L = 40;
 const CLIM_H = 58;
@@ -21,8 +22,9 @@ const monthStartCol = (m: number, res: Resolution) => {
 
 type Props = {
   data: CalendarData;
-  series: Sensor;
   resolution: Resolution;
+  /** date filter: rows outside it are not drawn, cells outside it are left empty */
+  range: DateRange;
   selectedDate: string;
   highlightDates: string[];
   onSelect: (cell: CalendarCell) => void;
@@ -32,7 +34,16 @@ type Props = {
  * Fire-activity calendar on a single canvas: years down, days/weeks/months across, with the
  * climatological profile on top. "No observation" is hatched and never drawn as zero.
  */
-export function CalendarCanvas({ data, series, resolution, selectedDate, highlightDates, onSelect }: Props) {
+/** first day of the bin that contains `iso` */
+export function binStart(iso: string, res: Resolution): string {
+  if (res === 'day') return iso;
+  if (res === 'month') return `${iso.slice(0, 7)}-01`;
+  const y = +iso.slice(0, 4);
+  const d = new Date(Date.UTC(y, 0, 1 + Math.floor((doyOf(iso) - 1) / 7) * 7));
+  return d.toISOString().slice(0, 10);
+}
+
+export function CalendarCanvas({ data, resolution, range, selectedDate, highlightDates, onSelect }: Props) {
   const t = useT();
   const lang = useStore((s) => s.lang);
   const wrap = useRef<HTMLDivElement>(null);
@@ -41,7 +52,8 @@ export function CalendarCanvas({ data, series, resolution, selectedDate, highlig
   const [focus, setFocus] = useState<{ year: number; col: number; kb: boolean } | null>(null);
 
   const cols = COLS[resolution];
-  const yearNow = new Date().getUTCFullYear();
+  const Y0 = +range.from.slice(0, 4);
+  const yearNow = +range.to.slice(0, 4);
   const years = yearNow - Y0 + 1;
   const rowH = resolution === 'month' ? 20 : 15;
   const gap = resolution === 'day' ? 0 : 2;
@@ -52,9 +64,13 @@ export function CalendarCanvas({ data, series, resolution, selectedDate, highlig
 
   const index = useMemo(() => {
     const m = new Map<number, CalendarCell>();
-    for (const c of data.response.cells) m.set(+c.date.slice(0, 4) * 1000 + colOf(c.date, resolution), c);
+    const lo = binStart(range.from, resolution);
+    for (const c of data.response.cells) {
+      if (c.date < lo || c.date > range.to) continue;
+      m.set(+c.date.slice(0, 4) * 1000 + colOf(c.date, resolution), c);
+    }
     return m;
-  }, [data, resolution]);
+  }, [data, resolution, range.from, range.to]);
   const cellAt = useCallback((year: number, col: number) => index.get(year * 1000 + col), [index]);
 
   useEffect(() => {
@@ -74,7 +90,7 @@ export function CalendarCanvas({ data, series, resolution, selectedDate, highlig
     cv.height = Math.round(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
-    const max = data.domain[series];
+    const max = data.domain[SERIES];
     const hatch = noDataPattern(ctx);
     const x = (col: number) => GUTTER_L + col * cellW;
     const y = (year: number) => gridTop + (year - Y0) * (rowH + rowGap);
@@ -133,7 +149,7 @@ export function CalendarCanvas({ data, series, resolution, selectedDate, highlig
       for (let c = 0; c < cols; c++) {
         const cell = cellAt(yr, c);
         if (!cell) continue;
-        const v = cell[series];
+        const v = cell[SERIES];
         ctx.fillStyle = v === null ? hatch : fireColor(v, max);
         ctx.fillRect(x(c), y(yr), w + (gap ? 0 : 0.4), rowH);
       }
@@ -159,7 +175,7 @@ export function CalendarCanvas({ data, series, resolution, selectedDate, highlig
       ctx.lineWidth = 2;
       ctx.strokeRect(x(focus.col) - 1.5, y(focus.year) - 1.5, Math.max(4, w) + 3, rowH + 3);
     }
-  }, [data, series, resolution, width, height, cellW, cols, gap, rowH, gridTop, yearNow, cellAt, selectedDate, highlightDates, focus, lang]);
+  }, [data, resolution, width, height, cellW, cols, gap, rowH, gridTop, Y0, yearNow, cellAt, selectedDate, highlightDates, focus, lang]);
 
   const hit = (e: MouseEvent) => {
     const r = e.currentTarget.getBoundingClientRect();

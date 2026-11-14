@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { fmtMonth, useT, type Key } from '@/app/i18n';
 import { SectionHeading, Spinner } from '@/components/ui';
-import { RECORD_START, USE_MOCKS } from '@/lib/env';
-import { todayIso } from '@/lib/geo';
+import { USE_MOCKS } from '@/lib/env';
 import { streamAnalyst } from '@/lib/sse';
 import { useStore } from '@/store';
 
@@ -13,7 +12,7 @@ export function Analyst() {
   const t = useT();
   const lang = useStore((s) => s.lang);
   const aoi = useStore((s) => s.aoi);
-  const series = useStore((s) => s.series);
+  const calRange = useStore((s) => s.calRange);
   const highlights = useStore((s) => s.highlights);
   const [question, setQuestion] = useState('');
   const [asked, setAsked] = useState('');
@@ -41,7 +40,7 @@ export function Analyst() {
     setStatus('streaming');
     try {
       const hl = await streamAnalyst(
-        { aoiId: aoi.id, question: q, lang, context: { from: RECORD_START, to: todayIso(), sensor: series } },
+        { aoiId: aoi.id, question: q, lang, context: { from: calRange.from, to: calRange.to, sensor: 'harmonized' } },
         (delta) => setAnswer((a) => a + delta),
         ctrl.signal,
       );
@@ -58,10 +57,7 @@ export function Analyst() {
     e.preventDefault();
     void ask(question);
   };
-  const openHighlight = (date: string) => {
-    useStore.getState().set({ date, resolution: 'month' });
-    document.getElementById('calendar')?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const openHighlight = (date: string) => useStore.getState().revealOnCalendar(date);
 
   return (
     <section id="analyst" className="section" aria-labelledby="analyst-title">

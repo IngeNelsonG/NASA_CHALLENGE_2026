@@ -12,7 +12,8 @@ export type WorkerApi = {
   csv: (p: CsvRequest) => string;
 };
 
-type CsvRequest = { kind: 'calendar'; key: string } | { kind: 'hotspots' };
+/** `from`/`to`: calendar date filter (bin start dates) */
+type CsvRequest = { kind: 'calendar'; key: string; from?: string; to?: string } | { kind: 'hotspots' };
 const calendars = new Map<string, CalendarData>();
 let lastHotspots: Hotspot[] = [];
 
@@ -111,7 +112,7 @@ async function hotspots(p: { bbox: BBox; from: string; to: string; track?: boole
 
 function csv(p: CsvRequest): string {
   if (p.kind === 'calendar') {
-    const rows = calendars.get(p.key)?.response.cells ?? [];
+    const rows = (calendars.get(p.key)?.response.cells ?? []).filter((c) => (!p.from || c.date >= p.from) && (!p.to || c.date <= p.to));
     const head = 'date,modis,viirs,harmonized,harmonized_low,harmonized_high,frp_mw,anomaly_z';
     const v = (x: number | null | undefined) => (x === null || x === undefined ? '' : String(x));
     return [head, ...rows.map((c) => [c.date, v(c.modis), v(c.viirs), v(c.harmonized), v(c.harmonizedLow), v(c.harmonizedHigh), v(c.frp), v(c.anomalyZ)].join(','))].join('\n');

@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 import { bboxCenter, bboxSpan, clamp, todayIso } from '@/lib/geo';
-import type { AnalystHighlight, AOI, Resolution, Sensor } from '@/lib/types';
+import { RECORD_START } from '@/lib/env';
+import type { AnalystHighlight, AOI, Resolution } from '@/lib/types';
 import { view } from '@/scenes/view';
 
 export type Lang = 'en' | 'es';
 export type Granularity = 'day' | 'month' | 'year';
-export type LayerId = 'modis' | 'viirs' | 'density' | 'terminator' | 'orbits' | 'borders';
+/** MODIS and VIIRS detections are always shown together; only these context layers can be toggled. */
+export type LayerId = 'density' | 'terminator' | 'orbits' | 'borders';
+export type DateRange = { from: string; to: string };
 export type TimeScale = 1 | 60 | 600;
 
 export const DEFAULT_AOI: AOI = { id: 'co-orinoquia', name: 'Orinoquía, Colombia', bbox: [-74.0, 2.0, -67.4, 7.2] };
@@ -31,7 +34,8 @@ type State = {
   granularity: Granularity;
   playing: boolean;
   timeScale: TimeScale;
-  series: Sensor;
+  /** date filter of the calendar (the only data filter in the app) */
+  calRange: DateRange;
   resolution: Resolution;
   tool: 'pan' | 'rect';
   hoverSat: { norad: number; x: number; y: number } | null;
@@ -45,6 +49,9 @@ type State = {
   flyToAoi: () => void;
   /** Calendar → globe: jump the timeline to a date and bring the explorer into view. */
   focusDate: (date: string, granularity?: Granularity) => void;
+  setCalRange: (r: DateRange) => void;
+  /** Globe/anomalies/analyst → calendar: show a date, widening the filter if it is outside. */
+  revealOnCalendar: (date: string) => void;
 };
 
 export const zoomForSpan = (spanDeg: number) => clamp(55 / Math.max(1, spanDeg), 1, 5.5);
@@ -55,14 +62,14 @@ export const useStore = create<State>((set, get) => ({
   sceneReady: false,
   webgl: true,
   viewMode: '3d',
-  layers: { modis: true, viirs: true, density: false, terminator: true, orbits: true, borders: true },
+  layers: { density: false, terminator: true, orbits: true, borders: true },
   aoi: DEFAULT_AOI,
   picked: null,
   date: todayIso(),
   granularity: 'month',
   playing: false,
   timeScale: 60,
-  series: 'harmonized',
+  calRange: { from: RECORD_START, to: todayIso() },
   resolution: 'day',
   tool: 'pan',
   hoverSat: null,
@@ -93,6 +100,18 @@ export const useStore = create<State>((set, get) => ({
     set({ date, playing: false, ...(granularity ? { granularity } : {}) });
     get().flyToAoi();
     document.getElementById('explore')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  },
+  setCalRange: ({ from, to }) => {
+    const lo = from < RECORD_START ? RECORD_START : from;
+    const hi = to > todayIso() || !to ? todayIso() : to;
+    set({ calRange: lo <= hi ? { from: lo, to: hi } : { from: hi, to: lo } });
+  },
+  revealOnCalendar: (date) => {
+    const { calRange } = get();
+    const patch: Partial<State> = { date, resolution: 'month' };
+    if (date < calRange.from || date > calRange.to) patch.calRange = { from: RECORD_START, to: todayIso() };
+    set(patch);
+    document.getElementById('calendar')?.scrollIntoView({ behavior: 'smooth' });
   },
 }));
 

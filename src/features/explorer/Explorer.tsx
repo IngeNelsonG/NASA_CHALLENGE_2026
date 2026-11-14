@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { useT } from '@/app/i18n';
-import { Segmented, SensorDot, Toggle } from '@/components/ui';
+import { Segmented, Toggle } from '@/components/ui';
 import { AoiSearch } from '@/features/aoi/AoiSearch';
 import { fireGradientCss } from '@/lib/colors';
 import { useGlobeStage } from '@/scenes/useGlobeStage';
@@ -9,7 +9,7 @@ import { useStore, type LayerId, type TimeScale } from '@/store';
 import { Map2D } from './Map2D';
 import { Timeline } from './Timeline';
 
-const LAYERS: LayerId[] = ['modis', 'viirs', 'density', 'terminator', 'orbits', 'borders'];
+const LAYERS: LayerId[] = ['density', 'terminator', 'orbits', 'borders'];
 
 export function Explorer() {
   const t = useT();
@@ -87,14 +87,13 @@ export function Explorer() {
           <div className="mt-2 grid grid-cols-2 gap-x-3 lg:grid-cols-1">
             {LAYERS.map((id) => (
               <Toggle key={id} checked={layers[id]} onChange={() => toggleLayer(id)}>
-                {id === 'modis' && <SensorDot sensor="modis" />}
-                {id === 'viirs' && <SensorDot sensor="viirs" />}
                 {t(`layers.${id}`)}
               </Toggle>
             ))}
           </div>
           <div className="mt-3 border-t border-line pt-3 text-xs text-ink-dim">
             <p className="mb-1.5 font-semibold text-ink">{t('legend.title')}</p>
+            <p className="mb-2 leading-snug">{t('legend.both')}</p>
             <p className="flex items-center gap-2">
               <span aria-hidden className="inline-block h-3 w-3 rounded-full bg-modis" /> {t('legend.modis')}
             </p>

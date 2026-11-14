@@ -36,8 +36,8 @@ export function Anomalies() {
   const list = (q.data ?? []).slice(0, 10);
   const zMax = Math.max(3, ...list.map((a) => Math.abs(a.zScore)));
   const open = (start: string) => {
-    useStore.getState().set({ date: start, resolution: 'month', highlights: [{ date: start, reason: '' }] });
-    document.getElementById('calendar')?.scrollIntoView({ behavior: 'smooth' });
+    useStore.getState().set({ highlights: [{ date: start, reason: '' }] });
+    useStore.getState().revealOnCalendar(start);
   };
 
   return (

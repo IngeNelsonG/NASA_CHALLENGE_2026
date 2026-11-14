@@ -9,14 +9,14 @@ import { view } from './view';
 
 const VERT = /* glsl */ `
   attribute float aSensor; attribute float aFrp;
-  uniform float uSize; uniform float uShowM; uniform float uShowV; uniform vec3 uColM; uniform vec3 uColV;
+  uniform float uSize; uniform vec3 uColM; uniform vec3 uColV;
   varying vec3 vCol; varying float vVis;
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mv;
     vec3 n = normalize(position);
     // horizon test instead of depth: points on the far side fade out at the limb
-    vVis = mix(uShowM, uShowV, aSensor) * smoothstep(0.02, 0.10, dot(n, normalize(cameraPosition - position)));
+    vVis = smoothstep(0.02, 0.10, dot(n, normalize(cameraPosition - position)));
     // MODIS pixels (1 km) are drawn larger than VIIRS pixels (375 m)
     gl_PointSize = uSize * mix(1.0, 0.6, aSensor) * (0.85 + 0.3 * clamp(log(aFrp + 1.0) / 5.0, 0.0, 1.0));
     vCol = mix(uColM, uColV, aSensor);
@@ -33,11 +33,9 @@ const FRAG = /* glsl */ `
     #include <colorspace_fragment>
   }`;
 
-/** All fire detections in a single Points draw call. */
+/** All fire detections (MODIS and VIIRS, always together) in a single Points draw call. */
 export function Hotspots() {
   const data = useData((s) => s.hotspots);
-  const showM = useStore((s) => s.layers.modis);
-  const showV = useStore((s) => s.layers.viirs);
   const { gl, invalidate } = useThree();
 
   const material = useMemo(
@@ -50,8 +48,6 @@ export function Hotspots() {
         depthWrite: false,
         uniforms: {
           uSize: { value: 6 },
-          uShowM: { value: 1 },
-          uShowV: { value: 1 },
           uColM: { value: new Color(SENSOR_COLOR.modis) },
           uColV: { value: new Color(SENSOR_COLOR.viirs) },
         },
@@ -71,11 +67,7 @@ export function Hotspots() {
   }, [data]);
   useEffect(() => () => geometry.dispose(), [geometry]);
 
-  useEffect(() => {
-    material.uniforms.uShowM.value = showM ? 1 : 0;
-    material.uniforms.uShowV.value = showV ? 1 : 0;
-    invalidate();
-  }, [showM, showV, geometry, material, invalidate]);
+  useEffect(() => invalidate(), [geometry, invalidate]);
 
   useFrame(() => {
     material.uniforms.uSize.value = gl.getPixelRatio() * Math.min(16, 3.4 * Math.pow(Math.max(0.5, view.zoom), 0.75) + 1.2);
