@@ -31,7 +31,7 @@ function CoverageNote() {
   const key =
     coverage.source === 'too_long' ? 'coverage.too_long' : coverage.source === 'partial' ? 'coverage.partial' : 'coverage.none';
   return (
-    <p role="note" className="mt-3 rounded-lg border border-harmonized/40 bg-harmonized/10 px-3 py-2 text-[12px] leading-relaxed text-ink">
+    <p role="note" className="mt-3 rounded-lg bg-harmonized/10 px-3 py-2 text-xs leading-relaxed text-ink">
       {t(key, { days: coverage.maxDays })}
     </p>
   );
@@ -68,13 +68,13 @@ export function Explorer() {
 
           {/* zoom: small, out of the way, over the globe */}
           <div className="absolute right-3 top-[4.75rem] z-10 flex flex-col gap-1.5 sm:right-5 lg:right-6 lg:top-24">
-            <button type="button" className="btn btn-icon !min-h-[36px] !min-w-[36px]" onClick={() => view.zoomBy(1.4)} aria-label={t('globe.zoom_in')}>
+            <button type="button" className="btn btn-icon" onClick={() => view.zoomBy(1.4)} aria-label={t('globe.zoom_in')}>
               <span aria-hidden>+</span>
             </button>
-            <button type="button" className="btn btn-icon !min-h-[36px] !min-w-[36px]" onClick={() => view.zoomBy(1 / 1.4)} aria-label={t('globe.zoom_out')}>
+            <button type="button" className="btn btn-icon" onClick={() => view.zoomBy(1 / 1.4)} aria-label={t('globe.zoom_out')}>
               <span aria-hidden>−</span>
             </button>
-            <button type="button" className="btn btn-icon !min-h-[36px] !min-w-[36px]" onClick={() => useStore.getState().flyToAoi()} aria-label={t('globe.fit')} title={t('globe.fit')}>
+            <button type="button" className="btn btn-icon" onClick={() => useStore.getState().flyToAoi()} aria-label={t('globe.fit')} title={t('globe.fit')}>
               <span aria-hidden>⌖</span>
             </button>
           </div>
@@ -114,19 +114,19 @@ export function Explorer() {
                   </p>
                   <button
                     type="button"
-                    className={`btn shrink-0 !min-h-[36px] !text-xs ${tool === 'rect' ? 'btn-primary' : ''}`}
+                    className={`btn btn-sm shrink-0 ${tool === 'rect' ? 'btn-primary' : ''}`}
                     aria-pressed={tool === 'rect'}
                     onClick={() => set({ tool: tool === 'rect' ? 'pan' : 'rect' })}
                   >
                     <span aria-hidden>▭</span> {tool === 'rect' ? t('aoi.drawing') : t('aoi.draw')}
                   </button>
                 </div>
-                <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3 text-[11px] text-ink-dim">
+                <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3 text-xs text-ink-dim">
                   <span className="flex items-center gap-1.5">
                     <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: HOTSPOT_COLOR }} /> {t('legend.hotspot')}
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span aria-hidden className="inline-block h-0.5 w-3 bg-brand-yellow" /> {t('legend.aoi')}
+                    <span aria-hidden className="inline-block h-0.5 w-3 bg-harmonized" /> {t('legend.aoi')}
                   </span>
                 </p>
                 <CoverageNote />

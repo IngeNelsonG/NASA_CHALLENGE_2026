@@ -93,7 +93,7 @@ export function Timeline() {
         />
         {g === 'day' && (
           <select
-            className="input !min-h-[32px] !w-auto !py-1 font-mono text-xs"
+            className="input min-h-8 !w-auto !py-1 font-mono text-xs"
             aria-label={t('time.year')}
             value={date.slice(0, 4)}
             onChange={(e) => {
@@ -117,7 +117,7 @@ export function Timeline() {
       </div>
       <input
         type="range"
-        className="mt-2 w-full accent-[#F2703A]"
+        className="mt-2 w-full accent-accent"
         min={mdl.min}
         max={mdl.max}
         step={1}
@@ -126,7 +126,7 @@ export function Timeline() {
         aria-valuetext={label}
         onChange={(e) => go(+e.target.value)}
       />
-      <div className="data flex justify-between text-[10px] text-ink-mute" aria-hidden>
+      <div className="data flex justify-between text-xs text-ink-mute" aria-hidden>
         <span>{g === 'day' ? fmtDay(mdl.toDate(mdl.min), lang) : mdl.toDate(mdl.min).slice(0, 4)}</span>
         <span>{t('time.shown')}</span>
         <span>{g === 'day' ? fmtDay(mdl.toDate(mdl.max), lang) : mdl.toDate(mdl.max).slice(0, 4)}</span>

@@ -41,7 +41,7 @@ export function SatelliteImage() {
   return (
     <section aria-labelledby="sat-title" className="panel pointer-events-auto overflow-hidden">
       <div className="flex items-center justify-between gap-2 px-4 pb-2 pt-3.5">
-        <h3 id="sat-title" className="text-sm font-semibold text-ink">
+        <h3 id="sat-title" className="card-title">
           {t('satimg.title')}
         </h3>
         <Segmented<ImageView>
@@ -52,9 +52,9 @@ export function SatelliteImage() {
           options={IMAGE_VIEWS.map((v) => ({ value: v, label: t(`satimg.${v}`) }))}
         />
       </div>
-      <div className="relative bg-space-950" style={{ aspectRatio: `${img.width} / ${img.height}` }}>
+      <div className="relative bg-graphite-950" style={{ aspectRatio: `${img.width} / ${img.height}` }}>
         {state !== 'ok' && (
-          <div className={`absolute inset-0 grid place-items-center text-xs text-ink-dim ${state === 'loading' ? 'animate-pulse bg-space-800/60' : ''}`} role="status">
+          <div className={`absolute inset-0 grid place-items-center text-xs text-ink-dim ${state === 'loading' ? 'animate-pulse bg-graphite-800/60' : ''}`} role="status">
             {state === 'loading' ? t('satimg.loading') : t('satimg.failed')}
           </div>
         )}
@@ -71,7 +71,7 @@ export function SatelliteImage() {
           className={`block h-full w-full object-cover transition-opacity duration-700 ${state === 'ok' ? 'opacity-100' : 'opacity-0'}`}
         />
       </div>
-      <div className="px-4 pb-3.5 pt-2.5 text-[11px] leading-relaxed text-ink-dim">
+      <div className="px-4 pb-3.5 pt-2.5 text-xs leading-relaxed text-ink-dim">
         <p>
           {t('satimg.caption', { sensor: SENSOR_LABEL[sensor], day: fmtDay(day, lang) })}{' '}
           {isPeak && t('satimg.peak')}

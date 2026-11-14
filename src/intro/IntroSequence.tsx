@@ -99,7 +99,7 @@ export default function IntroSequence() {
 
   return (
     <div className="fixed inset-0 z-40 grid place-items-center" role="dialog" aria-label={t('intro.label')}>
-      <div ref={ring} aria-hidden className="pointer-events-none invisible absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-brand-yonder/70 shadow-[0_0_40px_rgba(46,150,245,0.35)]" />
+      <div ref={ring} aria-hidden className="pointer-events-none invisible absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cream/50 shadow-[0_0_40px_rgba(239,229,215,0.2)]" />
       <div ref={logo} className="invisible relative flex flex-col items-center px-6 text-center">
         {logoMissing ? (
           // Text stand-in if the logo file is missing (we never redraw the logo).

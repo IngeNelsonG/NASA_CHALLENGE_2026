@@ -117,7 +117,7 @@ export function OrbitNav() {
               </a>
               <span
                 aria-hidden
-                className="data pointer-events-none absolute left-5 top-0 z-10 -translate-y-1/2 whitespace-nowrap px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-white opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+                className="pointer-events-none absolute left-5 top-0 z-10 -translate-y-1/2 whitespace-nowrap px-1.5 py-0.5 text-xs uppercase tracking-widest text-white opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
               >
                 {t(`nav.${id}`)}
               </span>

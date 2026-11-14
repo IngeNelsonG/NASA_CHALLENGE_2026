@@ -10,8 +10,8 @@ const MEMBERS: { name: string; owner?: boolean }[] = [
   { name: 'Daniel Esteban Alarcón Rojas' },
   { name: 'Edgard Leonardo Patiño Largo' },
 ];
-// each card rests slightly askew, like prints on a table, and straightens on hover
-const TILT = ['-rotate-2', 'rotate-1', '-rotate-1', 'rotate-2'];
+// subtle tilt only on hover
+const TILT = ['hover:-rotate-1', 'hover:rotate-1', 'hover:-rotate-1', 'hover:rotate-1'];
 
 const initials = (name: string) => {
   const p = name.split(' ');
@@ -30,14 +30,14 @@ export function Team() {
           <li key={m.name}>
             <Reveal delay={i * 90}>
               <article
-                className={`panel flex h-full min-h-[13.5rem] flex-col p-4 transition-transform duration-500 ease-out hover:-translate-y-1.5 hover:rotate-0 sm:min-h-[15rem] sm:p-5 ${TILT[i % TILT.length]}`}
+                className={`panel flex h-full min-h-[13.5rem] flex-col p-4 transition-transform duration-500 ease-out hover:-translate-y-1.5 sm:min-h-[15rem] sm:p-5 ${TILT[i % TILT.length]}`}
               >
                 <p aria-hidden className="font-display text-5xl font-light leading-none text-cream sm:text-6xl">
                   {initials(m.name)}
                 </p>
                 <h3 className="mt-auto pt-6 text-[15px] font-semibold leading-snug text-ink sm:text-base">{m.name}</h3>
                 <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-dim">
-                  {m.owner && <span className="chip !border-ember/60 !py-0.5 text-ink">{t('team.owner')}</span>}
+                  {m.owner && <span className="chip !border-accent/60 !py-0.5 text-ink">{t('team.owner')}</span>}
                   <span>Colombia</span>
                 </p>
               </article>

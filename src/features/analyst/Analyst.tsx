@@ -62,22 +62,22 @@ export function Analyst() {
   return (
     <section id="analyst" className="section" aria-labelledby="analyst-title">
       <SectionHeading id="analyst-title" eyebrow={t('analyst.eyebrow')} title={t('analyst.title')} lead={t('analyst.lead', { aoi: aoi.name })} />
-      <div className="panel mx-auto max-w-3xl p-4 sm:p-5 lg:mx-0">
+      <div className="panel mx-auto max-w-3xl p-4 sm:p-5">
         <div className="flex flex-wrap gap-2">
           {SUGGESTIONS.map((k) => (
-            <button key={k} type="button" className="chip min-h-[32px] hover:border-brand-yonder/60 hover:text-ink" disabled={status === 'streaming'} onClick={() => void ask(t(k))}>
+            <button key={k} type="button" className="chip-btn" disabled={status === 'streaming'} onClick={() => void ask(t(k))}>
               {t(k)}
             </button>
           ))}
         </div>
 
-        <div className="mt-4 min-h-[9rem] rounded-lg border border-line bg-space-900/70 p-4" aria-live="polite" aria-busy={status === 'streaming'}>
+        <div className="mt-4 min-h-[9rem] rounded-lg border border-line bg-graphite-900/70 p-4" aria-live="polite" aria-busy={status === 'streaming'}>
           {status === 'idle' && <p className="text-sm text-ink-mute">{t('analyst.empty')}</p>}
           {asked && <p className="mb-3 text-sm font-semibold text-ink">› {asked}</p>}
           {answer && (
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">
               {answer}
-              {status === 'streaming' && <span aria-hidden className="ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-pulse bg-brand-yonder" />}
+              {status === 'streaming' && <span aria-hidden className="ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-pulse bg-accent" />}
             </p>
           )}
           {status === 'streaming' && !answer && <Spinner label={t('analyst.thinking')} />}
@@ -95,7 +95,7 @@ export function Analyst() {
               <ul className="mt-2 flex flex-wrap gap-2">
                 {highlights.map((h) => (
                   <li key={h.date}>
-                    <button type="button" className="chip min-h-[32px] border-brand-yellow/50 text-ink hover:border-brand-yellow" title={h.reason} onClick={() => openHighlight(h.date)}>
+                    <button type="button" className="chip-btn border-harmonized/50 bg-harmonized/10 text-ink hover:border-harmonized" title={h.reason} onClick={() => openHighlight(h.date)}>
                       <span className="data">{fmtMonth(h.date, lang)}</span>
                       {h.reason && <span className="text-ink-dim">· {h.reason}</span>}
                     </button>

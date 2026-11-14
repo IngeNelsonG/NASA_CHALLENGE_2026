@@ -2,7 +2,7 @@ import { geoCircle, geoEqualEarth, geoGraticule10, geoPath } from 'd3-geo';
 import { useEffect, useRef } from 'react';
 import { feature, mesh } from 'topojson-client';
 import type { GeometryCollection } from 'topojson-specification';
-import { fireRGB, HOTSPOT_COLOR, SENSOR_COLOR } from '@/lib/colors';
+import { CHART, fireRGB, HOTSPOT_COLOR, SENSOR_COLOR } from '@/lib/colors';
 import { bboxCenter, bboxId, bboxSpan, clamp, DEG, subsolar } from '@/lib/geo';
 import { satScenePos, sceneToGeodetic } from '@/lib/satellites';
 import { simClock } from '@/lib/simClock';
@@ -90,7 +90,7 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
       ctx.clip();
       ctx.beginPath();
       path(geoGraticule10());
-      ctx.strokeStyle = 'rgba(148,170,220,0.09)';
+      ctx.strokeStyle = CHART.grid;
       ctx.lineWidth = 0.6;
       ctx.stroke();
       if (land) {
@@ -156,7 +156,7 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
             path({ type: 'LineString', coordinates: coords });
           }
         else path(bboxPolygon(aoi.bbox));
-        ctx.strokeStyle = '#EAFE07';
+        ctx.strokeStyle = SENSOR_COLOR.harmonized;
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
@@ -218,7 +218,7 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
       ctx.restore();
       ctx.beginPath();
       path({ type: 'Sphere' });
-      ctx.strokeStyle = 'rgba(148,170,220,0.3)';
+      ctx.strokeStyle = CHART.grid;
       ctx.lineWidth = 1;
       ctx.stroke();
     };

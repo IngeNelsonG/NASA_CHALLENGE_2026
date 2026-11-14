@@ -2,15 +2,15 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { fmtInt, fmtMonth, monthName, useT } from '@/app/i18n';
 import { useCalendar } from '@/app/loaders';
-import { SectionHeading, Spinner } from '@/components/ui';
-import { fireColor } from '@/lib/colors';
+import { SectionHeading, Segmented, Spinner } from '@/components/ui';
+import { fireColor, HOTSPOT_COLOR, SENSOR_COLOR } from '@/lib/colors';
 import { api } from '@/lib/api';
 import { bboxId } from '@/lib/geo';
 import type { AlertAssessment, BBox } from '@/lib/types';
 import { useStore } from '@/store';
 
-const HOT = '#F2703A';
-const COOL = '#4C9BE8';
+const HOT = HOTSPOT_COLOR;
+const COOL = SENSOR_COLOR.viirs;
 
 const TZ_TO_AOI: Record<string, string> = {
   'America/Bogota': 'co',
@@ -64,11 +64,11 @@ function detectVisitorAoiId(): string {
   return 'co';
 }
 
-function severityBadgeClass(sev: AlertAssessment['severity']): string {
-  if (sev === 'CRITICAL') return 'border-rose-400/60 bg-rose-500/15 text-rose-200';
-  if (sev === 'WARNING') return 'border-amber-400/60 bg-amber-500/15 text-amber-200';
-  if (sev === 'WATCH') return 'border-yellow-400/50 bg-yellow-500/10 text-yellow-200';
-  return 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200';
+function severityDotClass(sev: AlertAssessment['severity']): string {
+  if (sev === 'CRITICAL') return 'bg-sev-critical';
+  if (sev === 'WARNING') return 'bg-sev-warning';
+  if (sev === 'WATCH') return 'bg-sev-watch';
+  return 'bg-sev-normal';
 }
 
 async function focusAlertTerritory(item: AlertAssessment): Promise<void> {
@@ -176,7 +176,7 @@ export function Anomalies() {
     <section id="anomalies" className="section" aria-labelledby="anomalies-title">
       <SectionHeading id="anomalies-title" eyebrow={t('anom.eyebrow')} title={t('anom.title')} lead={t('anom.lead')} />
       <div className="grid gap-5 lg:grid-cols-[1fr_1.25fr]">
-        <article className="panel p-4 sm:p-5">
+        <article className="panel p-5 sm:p-6">
           <h3 className="text-lg font-semibold">{t('anom.season_title')}</h3>
           {season ? (
             <>
@@ -191,7 +191,7 @@ export function Anomalies() {
                       className={`h-12 rounded-sm ${season.inSeason(m) ? 'outline outline-2 outline-offset-1 outline-white' : ''}`}
                       style={{ background: fireColor(v, season.max) }}
                     />
-                    <span className={`data mt-1.5 block text-[10px] ${season.inSeason(m) ? 'font-semibold text-ink' : 'text-ink-dim'}`}>{monthName(m, lang, 'narrow')}</span>
+                    <span className={`mt-1.5 block text-xs ${season.inSeason(m) ? 'font-semibold text-ink' : 'text-ink-dim'}`}>{monthName(m, lang, 'narrow')}</span>
                     <span className="sr-only">
                       {monthName(m, lang, 'long')}: {fmtInt(v, lang)}
                       {season.inSeason(m) ? ` (${t('anom.in_season')})` : ''}
@@ -208,7 +208,7 @@ export function Anomalies() {
           )}
         </article>
 
-        <article className="panel p-4 sm:p-5">
+        <article className="panel p-5 sm:p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="text-lg font-semibold">{t('anom.list_title')}</h3>
             <p className="flex items-center gap-3 text-xs text-ink-dim">
@@ -236,7 +236,7 @@ export function Anomalies() {
                 const same = a.start.slice(0, 7) === a.end.slice(0, 7);
                 return (
                   <li key={a.start + a.end}>
-                    <button type="button" onClick={() => open(a.start)} title={a.label} className="grid w-full grid-cols-[minmax(7.5rem,auto)_1fr_auto] items-center gap-3 rounded-md px-1 py-2 text-left hover:bg-space-700/60">
+                    <button type="button" onClick={() => open(a.start)} title={a.label} className="grid w-full grid-cols-[minmax(7.5rem,auto)_1fr_auto] items-center gap-3 rounded-md px-1 py-2 text-left hover:bg-white/[0.04]">
                       <span className="data text-sm text-ink">
                         {fmtMonth(a.start, lang)}
                         {!same && <> – {fmtMonth(a.end, lang)}</>}
@@ -260,16 +260,17 @@ export function Anomalies() {
       </div>
 
       {/* Deterministic Early-Warning Alert Routing (CAP-1.2) */}
-      <article className="panel mt-6 p-6">
+      <article className="panel mt-6 p-5 sm:p-6">
         {visitorQ.data && (
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-space-800/70 px-4 py-3 text-xs">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white/[0.03] px-4 py-3 text-xs">
             <div className="flex flex-wrap items-center gap-2.5">
               <span className="eyebrow">{t('anom.loc_detected')}</span>
               <strong className="font-semibold text-ink">{visitorQ.data.region_name}</strong>
-              <span className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-medium ${severityBadgeClass(visitorQ.data.severity)}`}>
+              <span className="chip text-ink">
+                <i aria-hidden className={`h-1.5 w-1.5 rounded-full ${severityDotClass(visitorQ.data.severity)}`} />
                 {lang === 'es' ? visitorQ.data.severity_label_es : visitorQ.data.severity_label_en}
               </span>
-              <span className="text-ink-dim">
+              <span className="data text-ink-dim">
                 ({visitorQ.data.z_score >= 0 ? '+' : '−'}
                 {Math.abs(visitorQ.data.z_score).toFixed(2)} σ)
               </span>
@@ -279,7 +280,7 @@ export function Anomalies() {
                 <button
                   type="button"
                   onClick={() => void focusAlertTerritory(visitorQ.data)}
-                  className="btn !min-h-[30px] text-xs"
+                  className="btn btn-sm"
                 >
                   {t('anom.loc_fly')}
                 </button>
@@ -288,11 +289,11 @@ export function Anomalies() {
                 type="button"
                 onClick={requestGpsLocation}
                 disabled={gpsStatus === 'loading'}
-                className="btn !min-h-[30px] text-xs"
+                className="btn btn-sm"
               >
                 {gpsStatus === 'loading' ? t('common.loading') : t('anom.loc_gps')}
               </button>
-              {gpsStatus === 'denied' && <span className="text-[11px] text-amber-300">{t('anom.loc_gps_denied')}</span>}
+              {gpsStatus === 'denied' && <span className="text-xs text-ink-dim">{t('anom.loc_gps_denied')}</span>}
             </div>
           </div>
         )}
@@ -302,11 +303,11 @@ export function Anomalies() {
             <div className="flex flex-wrap items-center gap-2">
               <p className="eyebrow">{t('anom.alert_eyebrow')}</p>
               {alertQ.data && (
-                <span className="chip text-[11px]">{alertQ.data.protocol}</span>
+                <span className="chip">{alertQ.data.protocol}</span>
               )}
             </div>
-            <h3 className="mt-1 font-display text-lg font-medium text-ink">
-              {t('anom.alert_title')} — <span className="text-brand-yonder">{aoi.name}</span>
+            <h3 className="card-title mt-1">
+              {t('anom.alert_title')} — <span className="font-semibold text-ink">{aoi.name}</span>
             </h3>
           </div>
           {alertQ.isError ? (
@@ -314,16 +315,15 @@ export function Anomalies() {
           ) : alertQ.isLoading ? (
             <Spinner label={t('common.loading')} />
           ) : alertQ.data ? (
-            <span
-              className={`rounded-full border px-3 py-1 font-mono text-xs font-medium tracking-wider ${severityBadgeClass(alertQ.data.severity)}`}
-            >
+            <span className="chip text-ink">
+              <i aria-hidden className={`h-1.5 w-1.5 rounded-full ${severityDotClass(alertQ.data.severity)}`} />
               {lang === 'es' ? alertQ.data.severity_label_es : alertQ.data.severity_label_en}
             </span>
           ) : null}
         </div>
 
         {alertQ.data && (
-          <div className="mt-4 space-y-5">
+          <div className="mt-6 space-y-8">
             <div>
               <p className="text-sm font-medium text-ink">
                 {lang === 'es' ? alertQ.data.headline_es : alertQ.data.headline_en}
@@ -333,54 +333,66 @@ export function Anomalies() {
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-2.5 text-xs">
-              <span className="chip data">
-                {alertQ.data.z_score >= 0 ? '+' : '−'}
-                {Math.abs(alertQ.data.z_score).toFixed(2)} σ
-              </span>
-              <span className="chip data">
-                {alertQ.data.anomaly_ratio.toFixed(2)}× {t('anom.alert_ratio')}
-              </span>
-              <span className="chip data">
-                {t('anom.alert_persist')}: {alertQ.data.persistence_months} {t('anom.alert_months')}
-              </span>
-              <span className="chip">
-                {t('anom.alert_trend')}: {t(`anom.alert_trend_${alertQ.data.trend_direction}`)}
-              </span>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
+              <div>
+                <dt className="text-xs text-ink-mute">{t('cal.anomaly')}</dt>
+                <dd className="data mt-0.5 text-sm text-ink">
+                  {alertQ.data.z_score >= 0 ? '+' : '−'}
+                  {Math.abs(alertQ.data.z_score).toFixed(2)} σ
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-ink-mute">{t('anom.alert_ratio')}</dt>
+                <dd className="data mt-0.5 text-sm text-ink">{alertQ.data.anomaly_ratio.toFixed(2)}×</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-ink-mute">{t('anom.alert_persist')}</dt>
+                <dd className="data mt-0.5 text-sm text-ink">
+                  {alertQ.data.persistence_months} {t('anom.alert_months')}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-ink-mute">{t('anom.alert_trend')}</dt>
+                <dd className="mt-0.5 text-sm text-ink">{t(`anom.alert_trend_${alertQ.data.trend_direction}`)}</dd>
+              </div>
               {alertQ.data.unseasonal && (
-                <span className="chip border-amber-400/40 text-amber-200">{t('anom.alert_unseasonal')}</span>
+                <div>
+                  <dt className="text-xs text-ink-mute">{t('anom.season_title')}</dt>
+                  <dd className="mt-0.5 text-sm text-ink">{t('anom.alert_unseasonal')}</dd>
+                </div>
               )}
               {alertQ.data.nrt_percent_of_normal != null && (
-                <span className="chip data">
-                  {t('anom.alert_nrt')}: {alertQ.data.nrt_percent_of_normal.toFixed(0)} %
-                </span>
+                <div>
+                  <dt className="text-xs text-ink-mute">{t('anom.alert_nrt')}</dt>
+                  <dd className="data mt-0.5 text-sm text-ink">{alertQ.data.nrt_percent_of_normal.toFixed(0)} %</dd>
+                </div>
               )}
-            </div>
+            </dl>
 
-            <div className="grid gap-5 border-t border-line pt-4 lg:grid-cols-12">
+            <div className="grid gap-5 border-t border-line pt-6 lg:grid-cols-12">
               <div className="lg:col-span-7">
                 <p className="eyebrow">{t('anom.alert_authorities')}</p>
                 <ul className="mt-2.5 grid gap-2 sm:grid-cols-2">
                   {alertQ.data.authorities.map((auth) => (
                     <li
                       key={auth.code}
-                      className="rounded-lg border border-line/80 bg-space-800/50 px-3 py-2 text-xs"
+                      className="rounded-lg bg-white/[0.03] px-3 py-2 text-xs"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono font-semibold text-ink">{auth.code}</span>
+                        <span className="font-semibold text-ink">{auth.code}</span>
                         {auth.portal && (
                           <a
                             href={auth.portal}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-[11px] text-amber-300 underline-offset-2 hover:underline"
+                            className="text-xs text-ink-dim underline-offset-2 hover:text-ink hover:underline"
                           >
                             {t('anom.alert_portal')} ↗
                           </a>
                         )}
                       </div>
-                      <p className="mt-0.5 text-[11px] font-medium text-ink-dim">{auth.name}</p>
-                      <p className="mt-0.5 text-[11px] leading-snug text-ink-mute">
+                      <p className="mt-0.5 text-xs font-medium text-ink-dim">{auth.name}</p>
+                      <p className="mt-0.5 text-xs leading-snug text-ink-mute">
                         {lang === 'es' ? auth.role_es : auth.role_en}
                       </p>
                     </li>
@@ -396,7 +408,7 @@ export function Anomalies() {
                     : alertQ.data.recommended_actions_en
                   ).map((step, idx) => (
                     <li key={idx} className="flex gap-2">
-                      <span className="font-mono text-ink-mute">{idx + 1}.</span>
+                      <span className="data text-ink-mute">{idx + 1}.</span>
                       <span>{step}</span>
                     </li>
                   ))}
@@ -405,28 +417,22 @@ export function Anomalies() {
             </div>
 
             {/* Interactive Country & Colombia Departments Alert Monitor */}
-            <div className="border-t border-line pt-5">
+            <div className="border-t border-line pt-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h4 className="font-display text-base font-medium text-ink">{t('anom.dir_title')}</h4>
+                  <h4 className="card-title">{t('anom.dir_title')}</h4>
                   <p className="mt-0.5 text-xs text-ink-dim">{t('anom.dir_lead')}</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTab('countries')}
-                    className={`btn !min-h-[32px] text-xs ${tab === 'countries' ? 'btn-primary' : ''}`}
-                  >
-                    {t('anom.tab_countries')} ({overviewQ.data?.countries.length ?? 0})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTab('colombia')}
-                    className={`btn !min-h-[32px] text-xs ${tab === 'colombia' ? 'btn-primary' : ''}`}
-                  >
-                    {t('anom.tab_colombia')} ({overviewQ.data?.colombia.length ?? 0})
-                  </button>
-                </div>
+                <Segmented<'countries' | 'colombia'>
+                  size="sm"
+                  label={t('anom.dir_title')}
+                  value={tab}
+                  onChange={setTab}
+                  options={[
+                    { value: 'countries', label: `${t('anom.tab_countries')} (${overviewQ.data?.countries.length ?? 0})` },
+                    { value: 'colombia', label: `${t('anom.tab_colombia')} (${overviewQ.data?.colombia.length ?? 0})` },
+                  ]}
+                />
               </div>
 
               <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -442,7 +448,7 @@ export function Anomalies() {
                     type="checkbox"
                     checked={activeOnly}
                     onChange={(e) => setActiveOnly(e.target.checked)}
-                    className="accent-modis"
+                    className="accent-accent"
                   />
                   {t('anom.active_only')}
                 </label>
@@ -459,17 +465,18 @@ export function Anomalies() {
                       key={item.aoi_id}
                       type="button"
                       onClick={() => void focusAlertTerritory(item)}
-                      className={`rounded-lg border p-3 text-left transition-colors hover:bg-space-700/70 ${
-                        item.aoi_id === aoi.id ? 'border-brand-yonder bg-space-700/60' : 'border-line/80 bg-space-800/40'
+                      className={`rounded-lg border p-3 text-left transition-colors hover:bg-white/[0.06] ${
+                        item.aoi_id === aoi.id ? 'border-accent bg-white/[0.06]' : 'border-transparent bg-white/[0.03]'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <span className="text-xs font-semibold text-ink">{item.region_name}</span>
-                        <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] ${severityBadgeClass(item.severity)}`}>
+                        <span className="chip shrink-0 text-ink">
+                          <i aria-hidden className={`h-1.5 w-1.5 rounded-full ${severityDotClass(item.severity)}`} />
                           {lang === 'es' ? item.severity_label_es : item.severity_label_en}
                         </span>
                       </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2 font-mono text-[11px] text-ink-dim">
+                      <div className="data mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
                         <span>
                           {item.z_score >= 0 ? '+' : '−'}
                           {Math.abs(item.z_score).toFixed(2)} σ
@@ -478,7 +485,7 @@ export function Anomalies() {
                         {item.persistence_months > 0 && <span>· {item.persistence_months}m</span>}
                       </div>
                       {item.authorities[0] && (
-                        <p className="mt-1 truncate text-[11px] text-ink-mute">
+                        <p className="mt-1 truncate text-xs text-ink-mute">
                           {item.authorities.slice(0, 2).map((a) => a.code).join(' · ')}
                         </p>
                       )}
