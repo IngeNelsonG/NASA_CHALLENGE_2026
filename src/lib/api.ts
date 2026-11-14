@@ -1,5 +1,16 @@
 import { API_URL, USE_MOCKS } from './env';
-import type { AOI, AlertAssessment, Anomaly, BBox, CalendarResponse, Hotspot, RawSensor, Resolution, TLE } from './types';
+import type {
+  AOI,
+  AlertAssessment,
+  AlertsOverview,
+  Anomaly,
+  BBox,
+  CalendarResponse,
+  Hotspot,
+  RawSensor,
+  Resolution,
+  TLE,
+} from './types';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -40,5 +51,6 @@ export const api = {
     ),
   anomalies: (aoi: string, signal?: AbortSignal) => json<Anomaly[]>(`/api/anomalies?${qs({ aoi })}`, signal),
   alerts: (aoi: string, signal?: AbortSignal) => json<AlertAssessment>(`/api/alerts?${qs({ aoi })}`, signal),
+  alertsOverview: (signal?: AbortSignal) => json<AlertsOverview>('/api/alerts/overview', signal),
   tle: (signal?: AbortSignal) => json<TLE[]>('/api/satellites/tle', signal),
 };

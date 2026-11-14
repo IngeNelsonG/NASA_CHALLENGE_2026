@@ -7,7 +7,7 @@ import { useStore } from '@/store';
 
 gsap.registerPlugin(ScrollTrigger, MotionPathPlugin);
 
-export const SECTIONS = ['hero', 'problem', 'explore', 'calendar', 'anomalies', 'method', 'analyst', 'team', 'data'] as const;
+export const SECTIONS = ['hero', 'problem', 'explore', 'calendar', 'anomalies', 'method', 'transparency', 'analyst', 'team', 'data'] as const;
 const W = 76, H = 520;
 
 function SatIcon({ color }: { color: string }) {

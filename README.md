@@ -3,6 +3,8 @@
 Frontend for the NASA Space Apps Challenge 2026 challenge **"Harmonization of MODIS and VIIRS Hot Spots"** (authored by CONAE).
 It turns two fire records that cannot be compared directly — MODIS (1 km, 2000→) and VIIRS (375 m, 2012→) — into one burn-activity calendar for an area of interest.
 
+> Documentación completa de física radiativa (Planck/Wien), estadística de anomalías, alertas CAP-1.2, GOES-16/18/19 ABI y ciclo de vida 2027+: [`TRANSPARENCIA_CIENTIFICA_Y_ESTADISTICA.md`](./TRANSPARENCIA_CIENTIFICA_Y_ESTADISTICA.md)
+
 > "Ember Calendar" is a working title. Change it in `src/lib/env.ts` (`APP_NAME`) and `index.html`.
 
 ## Run

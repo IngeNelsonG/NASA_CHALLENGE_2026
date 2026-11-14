@@ -6,6 +6,7 @@ import { Anomalies } from '@/features/anomalies/Anomalies';
 import { Explorer } from '@/features/explorer/Explorer';
 import { PickPanel, SatCard } from '@/features/explorer/Floating';
 import { Methodology } from '@/features/methodology/Methodology';
+import { Transparency } from '@/features/transparency/Transparency';
 import { Credits } from './Credits';
 import { Header } from './Header';
 import { Hero } from './Hero';
@@ -41,6 +42,7 @@ export default function Landing() {
         </Suspense>
         <Anomalies />
         <Methodology />
+        <Transparency />
         <Analyst />
         <Team />
         <Credits />

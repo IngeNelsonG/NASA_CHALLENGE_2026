@@ -102,6 +102,11 @@ export type AlertAssessment = {
   protocol: string;
 };
 
+export type AlertsOverview = {
+  countries: AlertAssessment[];
+  colombia: AlertAssessment[];
+};
+
 // ---- Frontend-only derived shapes (not part of the API) ----
 
 export type HotspotBuffers = {

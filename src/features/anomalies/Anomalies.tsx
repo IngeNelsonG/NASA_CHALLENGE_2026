@@ -1,22 +1,153 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { fmtInt, fmtMonth, monthName, useT } from '@/app/i18n';
 import { useCalendar } from '@/app/loaders';
 import { SectionHeading, Spinner } from '@/components/ui';
 import { fireColor } from '@/lib/colors';
 import { api } from '@/lib/api';
+import { bboxId } from '@/lib/geo';
+import type { AlertAssessment, BBox } from '@/lib/types';
 import { useStore } from '@/store';
 
 const HOT = '#F2703A';
 const COOL = '#4C9BE8';
 
+const TZ_TO_AOI: Record<string, string> = {
+  'America/Bogota': 'co',
+  'America/Sao_Paulo': 'country:brazil',
+  'America/Manaus': 'country:brazil',
+  'America/Belem': 'country:brazil',
+  'America/Fortaleza': 'country:brazil',
+  'America/Recife': 'country:brazil',
+  'America/Cuiaba': 'country:brazil',
+  'America/Boa_Vista': 'country:brazil',
+  'America/Porto_Velho': 'country:brazil',
+  'America/Santiago': 'country:chile',
+  'America/Lima': 'country:peru',
+  'America/La_Paz': 'country:bolivia',
+  'America/Guayaquil': 'country:ecuador',
+  'America/Caracas': 'country:venezuela',
+  'America/Mexico_City': 'country:mexico',
+  'America/Monterrey': 'country:mexico',
+  'America/Cancun': 'country:mexico',
+  'America/New_York': 'country:united-states',
+  'America/Chicago': 'country:united-states',
+  'America/Denver': 'country:united-states',
+  'America/Los_Angeles': 'country:united-states',
+  'America/Toronto': 'country:canada',
+  'America/Vancouver': 'country:canada',
+  'Europe/Lisbon': 'pt',
+  'Europe/Madrid': 'country:spain',
+  'Europe/Paris': 'country:france',
+  'Africa/Lusaka': 'zm',
+};
+
+function detectVisitorAoiId(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? '';
+    if (tz in TZ_TO_AOI) return TZ_TO_AOI[tz];
+    if (tz.startsWith('America/Argentina/')) return 'ar';
+    if (tz.startsWith('Australia/')) return 'country:australia';
+    if (tz.startsWith('Asia/Jakarta') || tz.startsWith('Asia/Makassar')) return 'country:indonesia';
+    const lang = (navigator.language || '').toUpperCase();
+    if (lang.endsWith('-BR')) return 'country:brazil';
+    if (lang.endsWith('-AR')) return 'ar';
+    if (lang.endsWith('-CL')) return 'country:chile';
+    if (lang.endsWith('-PE')) return 'country:peru';
+    if (lang.endsWith('-MX')) return 'country:mexico';
+    if (lang.endsWith('-US')) return 'country:united-states';
+    if (lang.endsWith('-ES')) return 'country:spain';
+    if (lang.endsWith('-PT')) return 'pt';
+  } catch {
+    /* fallback below */
+  }
+  return 'co';
+}
+
+function severityBadgeClass(sev: AlertAssessment['severity']): string {
+  if (sev === 'CRITICAL') return 'border-rose-400/60 bg-rose-500/15 text-rose-200';
+  if (sev === 'WARNING') return 'border-amber-400/60 bg-amber-500/15 text-amber-200';
+  if (sev === 'WATCH') return 'border-yellow-400/50 bg-yellow-500/10 text-yellow-200';
+  return 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200';
+}
+
+async function focusAlertTerritory(item: AlertAssessment): Promise<void> {
+  const q = (item.department ?? item.country ?? item.region_name).replace(/,\s*Colombia$/i, '');
+  try {
+    const hits = await api.searchAoi(q);
+    const match = hits.find((h) => h.id === item.aoi_id) ?? hits[0];
+    if (match) {
+      useStore.getState().setAoi(match, true);
+      return;
+    }
+  } catch {
+    /* keep selection gracefully if offline */
+  }
+}
+
 export function Anomalies() {
   const t = useT();
   const lang = useStore((s) => s.lang);
   const aoi = useStore((s) => s.aoi);
+  const visitorAoiId = useMemo(detectVisitorAoiId, []);
+  const [tab, setTab] = useState<'countries' | 'colombia'>(() => (visitorAoiId === 'co' ? 'colombia' : 'countries'));
+  const [filterText, setFilterText] = useState('');
+  const [activeOnly, setActiveOnly] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<'idle' | 'loading' | 'denied'>('idle');
+
   const q = useQuery({ queryKey: ['anomalies', aoi.id], queryFn: ({ signal }) => api.anomalies(aoi.id, signal) });
   const alertQ = useQuery({ queryKey: ['alerts', aoi.id], queryFn: ({ signal }) => api.alerts(aoi.id, signal) });
+  const visitorQ = useQuery({
+    queryKey: ['alerts', visitorAoiId],
+    queryFn: ({ signal }) => api.alerts(visitorAoiId, signal),
+  });
+  const overviewQ = useQuery({
+    queryKey: ['alerts-overview'],
+    queryFn: ({ signal }) => api.alertsOverview(signal),
+    staleTime: 5 * 60_000,
+  });
   const monthly = useCalendar('month');
+
+  const requestGpsLocation = () => {
+    if (!navigator.geolocation) {
+      setGpsStatus('denied');
+      return;
+    }
+    setGpsStatus('loading');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGpsStatus('idle');
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const box: BBox = [
+          Number((lon - 1).toFixed(2)),
+          Number((lat - 1).toFixed(2)),
+          Number((lon + 1).toFixed(2)),
+          Number((lat + 1).toFixed(2)),
+        ];
+        useStore.getState().setAoi(
+          {
+            id: bboxId(box),
+            name: `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? 'E' : 'W'} (±1°)`,
+            bbox: box,
+          },
+          true,
+        );
+      },
+      () => setGpsStatus('denied'),
+      { timeout: 8000 },
+    );
+  };
+
+  const directoryItems = useMemo(() => {
+    const raw = tab === 'countries' ? (overviewQ.data?.countries ?? []) : (overviewQ.data?.colombia ?? []);
+    const needle = filterText.trim().toLowerCase();
+    return raw.filter((item) => {
+      if (activeOnly && item.severity === 'NORMAL') return false;
+      if (!needle) return true;
+      return item.region_name.toLowerCase().includes(needle) || item.aoi_id.toLowerCase().includes(needle);
+    });
+  }, [overviewQ.data, tab, filterText, activeOnly]);
 
   // Typical critical season from the monthly climatology: months above half of the peak month.
   const season = useMemo(() => {
@@ -130,6 +261,42 @@ export function Anomalies() {
 
       {/* Deterministic Early-Warning Alert Routing (CAP-1.2) */}
       <article className="panel mt-6 p-6">
+        {visitorQ.data && (
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-space-800/70 px-4 py-3 text-xs">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="eyebrow">{t('anom.loc_detected')}</span>
+              <strong className="font-semibold text-ink">{visitorQ.data.region_name}</strong>
+              <span className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-medium ${severityBadgeClass(visitorQ.data.severity)}`}>
+                {lang === 'es' ? visitorQ.data.severity_label_es : visitorQ.data.severity_label_en}
+              </span>
+              <span className="text-ink-dim">
+                ({visitorQ.data.z_score >= 0 ? '+' : '−'}
+                {Math.abs(visitorQ.data.z_score).toFixed(2)} σ)
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {visitorQ.data.aoi_id !== aoi.id && (
+                <button
+                  type="button"
+                  onClick={() => void focusAlertTerritory(visitorQ.data)}
+                  className="btn !min-h-[30px] text-xs"
+                >
+                  {t('anom.loc_fly')}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={requestGpsLocation}
+                disabled={gpsStatus === 'loading'}
+                className="btn !min-h-[30px] text-xs"
+              >
+                {gpsStatus === 'loading' ? t('common.loading') : t('anom.loc_gps')}
+              </button>
+              {gpsStatus === 'denied' && <span className="text-[11px] text-amber-300">{t('anom.loc_gps_denied')}</span>}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -138,7 +305,9 @@ export function Anomalies() {
                 <span className="chip text-[11px]">{alertQ.data.protocol}</span>
               )}
             </div>
-            <h3 className="mt-1 font-display text-lg font-medium text-ink">{t('anom.alert_title')}</h3>
+            <h3 className="mt-1 font-display text-lg font-medium text-ink">
+              {t('anom.alert_title')} — <span className="text-brand-yonder">{aoi.name}</span>
+            </h3>
           </div>
           {alertQ.isError ? (
             <span className="text-xs text-ink-dim">{t('common.error')}</span>
@@ -146,15 +315,7 @@ export function Anomalies() {
             <Spinner label={t('common.loading')} />
           ) : alertQ.data ? (
             <span
-              className={`rounded-full border px-3 py-1 font-mono text-xs font-medium tracking-wider ${
-                alertQ.data.severity === 'CRITICAL'
-                  ? 'border-rose-400/60 bg-rose-500/15 text-rose-200'
-                  : alertQ.data.severity === 'WARNING'
-                    ? 'border-amber-400/60 bg-amber-500/15 text-amber-200'
-                    : alertQ.data.severity === 'WATCH'
-                      ? 'border-yellow-400/50 bg-yellow-500/10 text-yellow-200'
-                      : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
-              }`}
+              className={`rounded-full border px-3 py-1 font-mono text-xs font-medium tracking-wider ${severityBadgeClass(alertQ.data.severity)}`}
             >
               {lang === 'es' ? alertQ.data.severity_label_es : alertQ.data.severity_label_en}
             </span>
@@ -241,6 +402,90 @@ export function Anomalies() {
                   ))}
                 </ul>
               </div>
+            </div>
+
+            {/* Interactive Country & Colombia Departments Alert Monitor */}
+            <div className="border-t border-line pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h4 className="font-display text-base font-medium text-ink">{t('anom.dir_title')}</h4>
+                  <p className="mt-0.5 text-xs text-ink-dim">{t('anom.dir_lead')}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTab('countries')}
+                    className={`btn !min-h-[32px] text-xs ${tab === 'countries' ? 'btn-primary' : ''}`}
+                  >
+                    {t('anom.tab_countries')} ({overviewQ.data?.countries.length ?? 0})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTab('colombia')}
+                    className={`btn !min-h-[32px] text-xs ${tab === 'colombia' ? 'btn-primary' : ''}`}
+                  >
+                    {t('anom.tab_colombia')} ({overviewQ.data?.colombia.length ?? 0})
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <input
+                  type="search"
+                  value={filterText}
+                  onChange={(e) => setFilterText(e.target.value)}
+                  placeholder={t('anom.filter_ph')}
+                  className="input max-w-xs !py-1.5 text-xs"
+                />
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-ink-dim">
+                  <input
+                    type="checkbox"
+                    checked={activeOnly}
+                    onChange={(e) => setActiveOnly(e.target.checked)}
+                    className="accent-modis"
+                  />
+                  {t('anom.active_only')}
+                </label>
+              </div>
+
+              {overviewQ.isLoading ? (
+                <div className="mt-4 flex justify-center">
+                  <Spinner label={t('common.loading')} />
+                </div>
+              ) : (
+                <div className="mt-3 grid max-h-80 gap-2.5 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
+                  {directoryItems.map((item) => (
+                    <button
+                      key={item.aoi_id}
+                      type="button"
+                      onClick={() => void focusAlertTerritory(item)}
+                      className={`rounded-lg border p-3 text-left transition-colors hover:bg-space-700/70 ${
+                        item.aoi_id === aoi.id ? 'border-brand-yonder bg-space-700/60' : 'border-line/80 bg-space-800/40'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-xs font-semibold text-ink">{item.region_name}</span>
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] ${severityBadgeClass(item.severity)}`}>
+                          {lang === 'es' ? item.severity_label_es : item.severity_label_en}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 font-mono text-[11px] text-ink-dim">
+                        <span>
+                          {item.z_score >= 0 ? '+' : '−'}
+                          {Math.abs(item.z_score).toFixed(2)} σ
+                        </span>
+                        <span>· {item.anomaly_ratio.toFixed(2)}×</span>
+                        {item.persistence_months > 0 && <span>· {item.persistence_months}m</span>}
+                      </div>
+                      {item.authorities[0] && (
+                        <p className="mt-1 truncate text-[11px] text-ink-mute">
+                          {item.authorities.slice(0, 2).map((a) => a.code).join(' · ')}
+                        </p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

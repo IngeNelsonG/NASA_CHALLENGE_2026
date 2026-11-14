@@ -14,6 +14,7 @@ Files land in data/raw/firms/ (git-ignored). Existing files are skipped, so it i
 
 import argparse
 import sys
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -48,7 +49,7 @@ def download(url: str, target: Path) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--first", type=int, default=2000)
-    parser.add_argument("--last", type=int, default=2025)
+    parser.add_argument("--last", type=int, default=date.today().year - 1)
     args = parser.parse_args()
 
     jobs = {RAW_DIR.parent / "context" / name: url for name, url in CONTEXT_FILES.items()}
