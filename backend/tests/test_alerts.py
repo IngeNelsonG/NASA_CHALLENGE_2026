@@ -162,3 +162,13 @@ def test_evaluate_rows_falls_back_to_recent_oni_within_3_months() -> None:
     )
     assert stale.oni_value is None
     assert stale.enso_phase == "UNKNOWN"
+
+
+def test_cdgrd_authority_codes_are_not_truncated() -> None:
+    cund = get_authorities_for_aoi(department="Cundinamarca", in_colombia=True)
+    norte = get_authorities_for_aoi(department="Norte de Santander", in_colombia=True)
+    valle = get_authorities_for_aoi(department="Valle del Cauca", in_colombia=True)
+    assert any(a.code == "CDGRD Cundinamarca" for a in cund)
+    assert any(a.code == "CDGRD Norte de Santander" for a in norte)
+    assert any(a.code == "CDGRD Valle del Cauca" for a in valle)
+

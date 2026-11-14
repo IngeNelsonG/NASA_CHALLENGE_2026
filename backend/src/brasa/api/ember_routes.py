@@ -26,7 +26,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from brasa.alerts.detector import ENSO_THRESHOLD, _enso_phase, evaluate_rows
+from brasa.alerts.detector import ENSO_THRESHOLD, _enso_phase, _fmt_es, evaluate_rows
 from brasa.alerts.schemas import AlertItem
 from brasa.api.hotspot_sources import (
     FIRMS_MAX_SPAN_DAYS,
@@ -1160,13 +1160,16 @@ def _compose_analyst_reply(
         d = date.fromisoformat(iso_d)
         return f"{months_tbl[d.month - 1]} {d.year}"
 
+    def _z_es(val: float) -> str:
+        return f"{'+' if val >= 0 else ''}{_fmt_es(val, 2)}\u03c3"
+
     highlights: list[dict[str, str]] = [
         {
             "date": a["start"],
             "reason": (
-                f"Anomal\u00eda positiva verificada (z = {a['zScore']:+.2f}\u03c3)"
+                f"Anomal\u00eda positiva verificada (z = {_z_es(float(a['zScore']))})"
                 if lang == "es"
-                else f"Verified positive anomaly (z = {a['zScore']:+.2f}\u03c3)"
+                else f"Verified positive anomaly (z = {float(a['zScore']):+.2f}\u03c3)"
             ),
         }
         for a in top_anoms
@@ -1186,22 +1189,23 @@ def _compose_analyst_reply(
             ),
             (
                 f"\u2022 Calibraci\u00f3n MODIS\u2013VIIRS: raz\u00f3n emp\u00edrica k = "
-                f"{ratio.ratio:.2f}\u00d7 (RIC {ratio.q25:.2f}\u2013{ratio.q75:.2f} en "
-                f"{ratio.overlap_months} meses de traslape). VIIRS (375 m I4 a 3,74 \u00b5m) "
-                "detecta focos m\u00e1s peque\u00f1os que MODIS (1 km a 3,96 \u00b5m); "
-                "la mezcla por inversa de varianza evita saltos artificiales."
+                f"{_fmt_es(ratio.ratio, 2)}\u00d7 (RIC {_fmt_es(ratio.q25, 2)}\u2013"
+                f"{_fmt_es(ratio.q75, 2)} en {_fmt_es(ratio.overlap_months, 0)} meses de "
+                "traslape). VIIRS (375 m I4 a 3,74 \u00b5m) detecta focos m\u00e1s peque\u00f1os "
+                "que MODIS (1 km a 3,96 \u00b5m); la mezcla por inversa de varianza evita saltos "
+                "artificiales."
             ),
         ]
         if top_anoms:
             anom_txt = ", ".join(
-                f"{_ym(a['start'])} (z = {float(a['zScore']):+.2f}\u03c3)" for a in top_anoms
+                f"{_ym(a['start'])} (z = {_z_es(float(a['zScore']))})" for a in top_anoms
             )
-            yr_txt = ", ".join(f"{y} ({v:,.0f} MODIS-eq)" for y, v in top_years)
+            yr_txt = ", ".join(f"{y} ({_fmt_es(v, 0)} eq-MODIS)" for y, v in top_years)
             suffix = f" \u2014 a\u00f1os pico: {yr_txt}." if top_years else "."
             bullets.append(f"\u2022 Episodios extremos (log-estandarizado): {anom_txt}{suffix}")
         if mean_frp is not None:
             bullets.append(
-                f"\u2022 Potencia Radiativa (FRP): promedio de {mean_frp:.1f} MW en celdas "
+                f"\u2022 Potencia Radiativa (FRP): promedio de {_fmt_es(mean_frp, 1)} MW en celdas "
                 "activas (Stefan-Boltzmann / banda MIR ~4 \u00b5m)."
             )
         if is_enso_q:

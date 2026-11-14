@@ -1,6 +1,8 @@
 """Integration tests for the unified /api/* compatibility endpoints (ember_routes)."""
 
+import json
 import math
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -234,3 +236,31 @@ def test_enso_endpoint_returns_payload_and_404_for_unknown(ember_client: TestCli
 
     missing = ember_client.get("/api/enso", params={"aoi": "unknown-place-xyz"})
     assert missing.status_code == 404
+
+
+def test_analyst_spanish_reply_uses_spanish_number_formatting(ember_client: TestClient) -> None:
+    res = ember_client.post(
+        "/api/analyst",
+        json={
+            "aoiId": "co",
+            "question": "¿Cuáles son los años pico y la calibración?",
+            "lang": "es",
+        },
+    )
+    assert res.status_code == 200
+    chunks: list[str] = []
+    highlights: list[str] = []
+    for line in res.text.splitlines():
+        if not line.startswith("data: "):
+            continue
+        payload = json.loads(line[6:])
+        if "delta" in payload:
+            chunks.append(payload["delta"])
+        if "highlights" in payload:
+            highlights = payload["highlights"]
+    full_reply = "".join(chunks)
+    assert full_reply
+    assert re.search(r"\d,\d{3}", full_reply) is None
+    assert all(re.search(r"\d,\d{3}", h.get("reason", "")) is None for h in highlights)
+    assert re.search(r"\d+,\d+", full_reply) is not None
+

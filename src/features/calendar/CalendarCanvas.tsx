@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { fmtDay, fmtInt, fmtMonth, monthName, useT } from '@/app/i18n';
 import { CHART, fireColor, noDataPattern, SENSOR_COLOR } from '@/lib/colors';
+import { fmtSigma } from '@/lib/format';
 import { doyOf, yearStartIdx } from '@/lib/geo';
 import type { CalendarCell, CalendarData, Resolution } from '@/lib/types';
 import { useStore, type DateRange } from '@/store';
@@ -211,7 +212,7 @@ export function CalendarCanvas({ data, resolution, range, selectedDate, highligh
   const cell = focus ? cellAt(focus.year, focus.col) : undefined;
   const dateLabel = (c: CalendarCell) => (resolution === 'month' ? fmtMonth(c.date, lang) : resolution === 'week' ? t('cal.week_of', { date: fmtDay(c.date, lang) }) : fmtDay(c.date, lang));
   const obs = (v: number | null) => (v === null ? t('common.no_obs') : fmtInt(v, lang));
-  const zText = (z: number) => `${z > 0 ? '+' : ''}${z.toFixed(1)} σ · ${t(Math.abs(z) < 1 ? 'cal.z_normal' : z > 0 ? (z >= 2 ? 'cal.z_far_above' : 'cal.z_above') : z <= -2 ? 'cal.z_far_below' : 'cal.z_below')}`;
+  const zText = (z: number) => `${fmtSigma(z, lang, 1)} · ${t(Math.abs(z) < 1 ? 'cal.z_normal' : z > 0 ? (z >= 2 ? 'cal.z_far_above' : 'cal.z_above') : z <= -2 ? 'cal.z_far_below' : 'cal.z_below')}`;
 
   const tipX = focus ? GUTTER_L + (focus.col + 0.5) * cellW : 0;
   const tipY = focus ? gridTop + (focus.year - Y0) * (rowH + rowGap) : 0;

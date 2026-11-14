@@ -1,12 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { fmtInt, useT, type Key } from '@/app/i18n';
+import { useT, type Key } from '@/app/i18n';
 import { useCalendar } from '@/app/loaders';
 import { SectionHeading } from '@/components/ui';
 import { api } from '@/lib/api';
 import { CHART, SENSOR_COLOR, SEV_COLOR } from '@/lib/colors';
-import { fmtTempC } from '@/lib/format';
+import { fmtDec, fmtInt, fmtRatio, fmtSigma, fmtSigned, fmtTempC } from '@/lib/format';
 import { useStore } from '@/store';
+
+const DATASET_LABEL: Record<string, Key> = {
+  'firms-archive': 'trans.dataset_firms_archive',
+  'firms-global-monthly': 'trans.dataset_firms_global',
+  'synthetic-sample': 'trans.dataset_synthetic',
+};
 
 const CARDS: { n: string; title: Key; eq: Key; body: Key }[] = [
   { n: '01', title: 'trans.s1_t', eq: 'trans.s1_eq', body: 'trans.s1_b' },
@@ -46,6 +52,7 @@ function lamToX(lam: number, w: number, padX: number): number {
 
 function PlanckWienDiagram() {
   const t = useT();
+  const lang = useStore((s) => s.lang);
   const w = 860;
   const h = 250;
   const padX = 46;
@@ -55,15 +62,15 @@ function PlanckWienDiagram() {
   const bgPath = useMemo(() => planckCurvePath(300, w, h, padX, padY), []);
 
   const bands = [
-    { lam: 3.74, label: 'VIIRS I4 · 3.74 µm', color: SENSOR_COLOR.viirs, row: 0 },
-    { lam: 3.9, label: 'GOES B7 · 3.90 µm', color: SEV_COLOR.normal, row: 1 },
-    { lam: 3.96, label: 'MODIS 21/22 · 3.96 µm', color: SENSOR_COLOR.modis, row: 2 },
-    { lam: 11.2, label: 'TIR Bg · 11.2 µm', color: CHART.axis, row: 0 },
-    { lam: 13.3, label: 'GOES B16 CO₂ · 13.3 µm', color: SEV_COLOR.watch, row: 1 },
+    { lam: 3.74, label: `VIIRS I4 · ${fmtDec(3.74, lang, 2)} µm`, color: SENSOR_COLOR.viirs, row: 0 },
+    { lam: 3.9, label: `GOES B7 · ${fmtDec(3.9, lang, 2)} µm`, color: SEV_COLOR.normal, row: 1 },
+    { lam: 3.96, label: `MODIS 21/22 · ${fmtDec(3.96, lang, 2)} µm`, color: SENSOR_COLOR.modis, row: 2 },
+    { lam: 11.2, label: t('trans.tir_bg', { lam: fmtDec(11.2, lang, 1) }), color: CHART.axis, row: 0 },
+    { lam: 13.3, label: `GOES B16 CO₂ · ${fmtDec(13.3, lang, 1)} µm`, color: SEV_COLOR.watch, row: 1 },
   ];
 
   return (
-    <div className="panel overflow-x-auto p-4 sm:p-5">
+    <div className="panel p-4 sm:p-5">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h3 className="text-lg font-semibold text-ink">{t('trans.wien_title')}</h3>
@@ -71,20 +78,21 @@ function PlanckWienDiagram() {
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs text-ink-dim">
           <span className="flex items-center gap-1.5">
-            <i aria-hidden className="inline-block h-0.5 w-4 bg-modis" /> 800 K (λ_max = 3.62 µm)
+            <i aria-hidden className="inline-block h-0.5 w-4 bg-modis" /> 800 K (λ_max = {fmtDec(3.62, lang, 2)} µm)
           </span>
           <span className="flex items-center gap-1.5">
-            <i aria-hidden className="inline-block h-0.5 w-4 bg-viirs" /> 300 K (λ_max = 9.66 µm)
+            <i aria-hidden className="inline-block h-0.5 w-4 bg-viirs" /> 300 K (λ_max = {fmtDec(9.66, lang, 2)} µm)
           </span>
         </div>
       </div>
 
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        className="w-full min-w-[640px]"
-        role="img"
-        aria-label={t('trans.wien_title')}
-      >
+      <div className="overflow-x-auto">
+        <svg
+          viewBox={`0 0 ${w} ${h}`}
+          className="w-full min-w-[540px]"
+          role="img"
+          aria-label={t('trans.wien_title')}
+        >
         <rect
           x={lamToX(3.5, w, padX)}
           y={padY - 4}
@@ -127,7 +135,8 @@ function PlanckWienDiagram() {
             </text>
           );
         })}
-      </svg>
+        </svg>
+      </div>
       <p className="mt-2 text-xs leading-relaxed text-ink-mute">{t('trans.wien_caption')}</p>
     </div>
   );
@@ -164,50 +173,70 @@ export function Transparency() {
             <h3 className="card-title">
               {t('trans.live_title')} <span className="font-semibold text-ink">{aoi.name}</span>
             </h3>
-            {meta?.dataset && <span className="chip">{meta.dataset}</span>}
+            {meta?.dataset && (
+              <span className="chip">
+                {DATASET_LABEL[meta.dataset] ? t(DATASET_LABEL[meta.dataset]) : meta.dataset}
+              </span>
+            )}
           </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border border-line/80 bg-graphite-900/60 p-3">
-              <p className="text-xs text-ink-mute">{t('trans.live_ratio')}</p>
-              <p className="data mt-1 text-base font-semibold text-ink">
-                {meta?.ratio != null ? `${meta.ratio.toFixed(3)}×` : '—'}
-              </p>
-              <p className="data mt-0.5 text-xs text-ink-dim">
-                {meta?.overlapMonths != null ? `${meta.overlapMonths} mo. overlap` : meta?.method ?? ''}
-              </p>
-            </div>
-            <div className="rounded-lg border border-line/80 bg-graphite-900/60 p-3">
-              <p className="text-xs text-ink-mute">{t('trans.live_z')}</p>
-              <p className="data mt-1 text-base font-semibold text-ink">
-                {alert ? `${alert.z_score >= 0 ? '+' : '−'}${Math.abs(alert.z_score).toFixed(2)} σ` : '—'}
-              </p>
-              <p className="data mt-0.5 text-xs text-ink-dim">
-                {alert ? `robust z = ${alert.robust_z >= 0 ? '+' : '−'}${Math.abs(alert.robust_z).toFixed(2)}` : '—'}
-              </p>
-            </div>
-            <div className="rounded-lg border border-line/80 bg-graphite-900/60 p-3">
-              <p className="text-xs text-ink-mute">{t('trans.live_clim')}</p>
-              <p className="data mt-1 text-base font-semibold text-ink">
-                {alert ? `${fmtInt(Math.round(alert.climatology_median), lang)} eq-MODIS` : '—'}
-              </p>
-              <p className="data mt-0.5 text-xs text-ink-dim">
-                {alert
-                  ? `IQR ${fmtInt(Math.round(alert.climatology_q25), lang)}–${fmtInt(Math.round(alert.climatology_q75), lang)} · p90 ${fmtInt(Math.round(alert.climatology_p90), lang)}`
+              <dt className="text-xs text-ink-mute">{t('trans.live_ratio')}</dt>
+              <dd className="data mt-1 text-base font-semibold text-ink">
+                {meta?.ratio != null ? fmtRatio(meta.ratio, lang, 3) : '—'}
+              </dd>
+              <dd className="data mt-0.5 text-xs text-ink-dim">
+                {meta?.overlapMonths != null
+                  ? meta.overlapMonths === 0
+                    ? t('trans.no_overlap')
+                    : meta.overlapMonths === 1
+                      ? t('trans.overlap_1')
+                      : t('trans.overlap_n', { n: fmtInt(meta.overlapMonths, lang) })
                   : '—'}
-              </p>
+              </dd>
             </div>
             <div className="rounded-lg border border-line/80 bg-graphite-900/60 p-3">
-              <p className="text-xs text-ink-mute">{t('trans.live_oni')}</p>
-              <p className="data mt-1 text-base font-semibold text-ink">
+              <dt className="text-xs text-ink-mute">{t('trans.live_z')}</dt>
+              <dd className="data mt-1 text-base font-semibold text-ink">
+                {alert ? fmtSigma(alert.z_score, lang, 2) : '—'}
+              </dd>
+              <dd className="data mt-0.5 text-xs text-ink-dim">
+                {alert ? t('trans.robust_z_eq', { val: fmtSigned(alert.robust_z, lang, 2) }) : '—'}
+              </dd>
+            </div>
+            <div className="rounded-lg border border-line/80 bg-graphite-900/60 p-3">
+              <dt className="text-xs text-ink-mute">{t('trans.live_clim')}</dt>
+              <dd className="data mt-1 text-base font-semibold text-ink">
+                {alert
+                  ? `${fmtInt(Math.round(alert.climatology_median), lang)} ${t('trans.modis_eq')}`
+                  : '—'}
+              </dd>
+              <dd className="data mt-0.5 text-xs text-ink-dim">
+                {alert
+                  ? `${t('trans.iqr_label')} ${fmtInt(Math.round(alert.climatology_q25), lang)}–${fmtInt(Math.round(alert.climatology_q75), lang)} · p90 ${fmtInt(Math.round(alert.climatology_p90), lang)}`
+                  : '—'}
+              </dd>
+            </div>
+            <div className="rounded-lg border border-line/80 bg-graphite-900/60 p-3">
+              <dt className="text-xs text-ink-mute">{t('trans.live_oni')}</dt>
+              <dd className="data mt-1 text-base font-semibold text-ink">
                 {alert
                   ? `${t(`enso.phase_${alert.enso_phase}` as Key)}${alert.oni_value != null ? ` (${fmtTempC(alert.oni_value, lang, 2)})` : ''}`
                   : '—'}
-              </p>
-              <p className="data mt-0.5 text-xs text-ink-dim">
-                {alert ? `${alert.persistence_months}m · ${t(`anom.alert_trend_${alert.trend_direction}` as Key)}` : '—'}
-              </p>
+              </dd>
+              <dd className="data mt-0.5 text-xs text-ink-dim">
+                {alert
+                  ? t('trans.persist_status', {
+                      count:
+                        alert.persistence_months === 1
+                          ? t('anom.alert_month_1')
+                          : t('anom.alert_months_n', { n: fmtInt(alert.persistence_months, lang) }),
+                      trend: t(`anom.alert_trend_${alert.trend_direction}` as Key),
+                    })
+                  : '—'}
+              </dd>
             </div>
-          </div>
+          </dl>
         </article>
       )}
 
@@ -217,10 +246,15 @@ export function Transparency() {
           <article key={c.n} className="panel flex flex-col p-4 sm:p-5">
             <span className="data text-xs text-ink-mute">{c.n}</span>
             <h3 className="mt-1 text-base font-semibold text-ink">{t(c.title)}</h3>
-            <p className="data mt-2.5 rounded-md bg-graphite-900/80 p-2.5 text-xs leading-relaxed text-ink">
-              {t(c.eq)}
-            </p>
             <p className="mt-2.5 text-sm leading-relaxed text-ink-dim">{t(c.body)}</p>
+            <details className="mt-3 text-xs">
+              <summary className="cursor-pointer select-none font-medium text-ink-dim hover:text-ink">
+                {t('trans.show_formula')}
+              </summary>
+              <p className="data mt-2 rounded-md bg-graphite-900/80 p-2.5 leading-relaxed text-ink">
+                {t(c.eq)}
+              </p>
+            </details>
           </article>
         ))}
 
@@ -232,45 +266,47 @@ export function Transparency() {
       </div>
 
       {/* GOES-16 / 18 / 19 ABI & NASA FIRMS Sensor Table */}
-      <article className="panel mt-5 overflow-x-auto p-4 sm:p-5">
+      <article className="panel mt-5 p-4 sm:p-5">
         <h3 className="text-lg font-semibold text-ink">{t('trans.goes_title')}</h3>
         <p className="mt-1 text-sm leading-relaxed text-ink-dim">{t('trans.goes_lead')}</p>
-        <table className="mt-4 w-full min-w-[640px] border-collapse text-left text-xs">
-          <thead>
-            <tr className="border-b border-line text-xs uppercase tracking-wider text-ink-mute">
-              <th className="py-2 pr-4">{t('trans.goes_col_sensor')}</th>
-              <th className="py-2 pr-4">{t('trans.goes_col_band')}</th>
-              <th className="py-2 pr-4">{t('trans.goes_col_res')}</th>
-              <th className="py-2">{t('trans.goes_col_role')}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line/60 text-ink-dim">
-            <tr>
-              <td className="py-2.5 pr-4 font-semibold text-modis">MODIS Terra / Aqua (MCD14ML)</td>
-              <td className="data py-2.5 pr-4">3.96 µm (Ch. 21/22) · 11.0 µm</td>
-              <td className="data py-2.5 pr-4">1 km · ~4×/day (2000–)</td>
-              <td className="py-2.5">{t('trans.goes_r1_role')}</td>
-            </tr>
-            <tr>
-              <td className="py-2.5 pr-4 font-semibold text-viirs">VIIRS S-NPP / NOAA-20 / NOAA-21</td>
-              <td className="data py-2.5 pr-4">3.74 µm (I4) · 11.45 µm (I5)</td>
-              <td className="data py-2.5 pr-4">375 m · ~6×/day (2012–)</td>
-              <td className="py-2.5">{t('trans.goes_r2_role')}</td>
-            </tr>
-            <tr>
-              <td className="py-2.5 pr-4 font-semibold text-sev-normal">GOES-16 / 18 / 19 ABI (Band 7)</td>
-              <td className="data py-2.5 pr-4">3.90 µm (B7) + 11.2 µm (B14)</td>
-              <td className="data py-2.5 pr-4">2 km · 10 min Full Disk</td>
-              <td className="py-2.5">{t('trans.goes_r3_role')}</td>
-            </tr>
-            <tr>
-              <td className="py-2.5 pr-4 font-semibold text-sev-watch">GOES-16 / 18 / 19 ABI (Band 16)</td>
-              <td className="data py-2.5 pr-4">13.3 µm (CO₂ absorption)</td>
-              <td className="data py-2.5 pr-4">2 km · 10 min Full Disk</td>
-              <td className="py-2.5">{t('trans.goes_r4_role')}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-line text-xs uppercase tracking-wider text-ink-mute">
+                <th className="py-2 pr-4">{t('trans.goes_col_sensor')}</th>
+                <th className="py-2 pr-4">{t('trans.goes_col_band')}</th>
+                <th className="py-2 pr-4">{t('trans.goes_col_res')}</th>
+                <th className="py-2">{t('trans.goes_col_role')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line/60 text-ink-dim">
+              <tr>
+                <td className="py-2.5 pr-4 font-semibold text-modis">MODIS Terra / Aqua (MCD14ML)</td>
+                <td className="data py-2.5 pr-4 whitespace-nowrap">{t('trans.goes_r1_band')}</td>
+                <td className="data py-2.5 pr-4 whitespace-nowrap">{t('trans.goes_r1_res')}</td>
+                <td className="min-w-[16rem] whitespace-normal py-2.5">{t('trans.goes_r1_role')}</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 pr-4 font-semibold text-viirs">VIIRS S-NPP / NOAA-20 / NOAA-21</td>
+                <td className="data py-2.5 pr-4 whitespace-nowrap">{t('trans.goes_r2_band')}</td>
+                <td className="data py-2.5 pr-4 whitespace-nowrap">{t('trans.goes_r2_res')}</td>
+                <td className="min-w-[16rem] whitespace-normal py-2.5">{t('trans.goes_r2_role')}</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 pr-4 font-semibold text-sev-normal">{t('trans.goes_r3_name')}</td>
+                <td className="data py-2.5 pr-4 whitespace-nowrap">{t('trans.goes_r3_band')}</td>
+                <td className="data py-2.5 pr-4 whitespace-nowrap">{t('trans.goes_r3_res')}</td>
+                <td className="min-w-[16rem] whitespace-normal py-2.5">{t('trans.goes_r3_role')}</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 pr-4 font-semibold text-sev-watch">{t('trans.goes_r4_name')}</td>
+                <td className="data py-2.5 pr-4 whitespace-nowrap">{t('trans.goes_r4_band')}</td>
+                <td className="data py-2.5 pr-4 whitespace-nowrap">{t('trans.goes_r4_res')}</td>
+                <td className="min-w-[16rem] whitespace-normal py-2.5">{t('trans.goes_r4_role')}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </article>
     </section>
   );

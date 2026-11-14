@@ -1,4 +1,5 @@
 // Mock backend: answers every /api/* route with a real Response, honouring the contracts in lib/types.ts.
+import { fmtRatio, fmtSigned } from '@/lib/format';
 import type {
   AnalystHighlight,
   AnalystRequest,
@@ -160,24 +161,24 @@ function analystStream(req: AnalystRequest): Response {
     const season = [peak - 1, peak, peak + 1].map((i) => (i + 12) % 12);
     const share = Math.round((season.reduce((a, i) => a + means[i], 0) / total) * 100);
     const an = anomaliesFor(aoi.bbox).filter((a) => a.zScore > 0).slice(0, 3);
-    const ratio = m12 ? (v12 / m12).toFixed(1) : '—';
+    const ratio = m12 ? fmtRatio(v12 / m12, lang, 1) : '—';
     const mName = (i: number) => MONTHS[lang][i];
     const ym = (iso: string) => `${mName(+iso.slice(5, 7) - 1)} ${iso.slice(0, 4)}`;
     highlights = an.map((a) => ({
       date: a.start,
-      reason: lang === 'es' ? `Actividad muy por encima de lo normal (z = ${a.zScore.toFixed(1)})` : `Activity far above normal (z = ${a.zScore.toFixed(1)})`,
+      reason: lang === 'es' ? `Actividad muy por encima de lo normal (z = ${fmtSigned(a.zScore, lang, 1)})` : `Activity far above normal (z = ${fmtSigned(a.zScore, lang, 1)})`,
     }));
     text =
       lang === 'es'
         ? `[Respuesta simulada — sin backend]\n\nSobre "${req.question.trim()}" en ${aoi.name}:\n\n` +
-          `• Temporada crítica: ${mName(season[0])}–${mName(season[2])} concentra cerca del ${share}% de la actividad armonizada anual, con máximo en ${mName(peak)}.\n` +
-          `• Periodos inusuales: ${an.length ? an.map((a) => `${ym(a.start)} (z = ${a.zScore.toFixed(1)})`).join(', ') : 'ninguno destacado'}.\n` +
-          `• Comparabilidad: desde 2013 VIIRS registra ~${ratio}× las detecciones de MODIS en esta área. Sumar los sensores sin armonizar crea saltos artificiales en 2012, 2018 y 2024; la serie armonizada los corrige y reporta un intervalo de incertidumbre.\n\n` +
+          `• Temporada crítica: ${mName(season[0])}–${mName(season[2])} concentra cerca del ${share} % de la actividad armonizada anual, con máximo en ${mName(peak)}.\n` +
+          `• Periodos inusuales: ${an.length ? an.map((a) => `${ym(a.start)} (z = ${fmtSigned(a.zScore, lang, 1)})`).join(', ') : 'ninguno destacado'}.\n` +
+          `• Comparabilidad: desde 2013 VIIRS registra ~${ratio} las detecciones de MODIS en esta área. Sumar los sensores sin armonizar crea saltos artificiales en 2012, 2018 y 2024; la serie armonizada los corrige y reporta un intervalo de incertidumbre.\n\n` +
           `Marqué estos periodos en el calendario. Las cifras de esta demo son sintéticas.`
         : `[Simulated answer — no backend]\n\nOn "${req.question.trim()}" for ${aoi.name}:\n\n` +
           `• Critical season: ${mName(season[0])}–${mName(season[2])} holds about ${share}% of the yearly harmonized activity, peaking in ${mName(peak)}.\n` +
-          `• Unusual periods: ${an.length ? an.map((a) => `${ym(a.start)} (z = ${a.zScore.toFixed(1)})`).join(', ') : 'none stand out'}.\n` +
-          `• Comparability: since 2013 VIIRS reports ~${ratio}× the MODIS detections in this area. Adding sensors without harmonizing creates artificial jumps in 2012, 2018 and 2024; the harmonized series corrects them and carries an uncertainty interval.\n\n` +
+          `• Unusual periods: ${an.length ? an.map((a) => `${ym(a.start)} (z = ${fmtSigned(a.zScore, lang, 1)})`).join(', ') : 'none stand out'}.\n` +
+          `• Comparability: since 2013 VIIRS reports ~${ratio} the MODIS detections in this area. Adding sensors without harmonizing creates artificial jumps in 2012, 2018 and 2024; the harmonized series corrects them and carries an uncertainty interval.\n\n` +
           `I marked these periods on the calendar. Figures in this demo are synthetic.`;
   }
 

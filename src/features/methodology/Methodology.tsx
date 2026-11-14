@@ -18,8 +18,44 @@ function Diagram() {
   const box = 'fill-graphite-800';
   const txt = 'fill-ink text-[13px] font-semibold';
   const sub = 'fill-ink-dim font-mono text-xs';
+  const stages: { title: Key; sub: Key }[] = [
+    { title: 'method.d_qc', sub: 'method.d_qc_s' },
+    { title: 'method.d_grid', sub: 'method.d_grid_s' },
+    { title: 'method.d_cal', sub: 'method.d_cal_s' },
+  ];
   return (
-    <svg viewBox="0 0 880 250" className="w-full min-w-[640px]" role="img" aria-label={t('method.diagram_aria')}>
+    <>
+      <div className="space-y-2.5 sm:hidden" role="img" aria-label={t('method.diagram_aria')}>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg border border-line bg-graphite-800 p-2.5">
+            <p className="text-xs font-semibold text-modis">MODIS · 1 km</p>
+            <p className="data mt-0.5 text-[11px] text-ink-dim">Terra 2000– · Aqua 2002–</p>
+          </div>
+          <div className="rounded-lg border border-line bg-graphite-800 p-2.5">
+            <p className="text-xs font-semibold text-viirs">VIIRS · 375 m</p>
+            <p className="data mt-0.5 text-[11px] text-ink-dim">S-NPP 2012– · NOAA-20/21</p>
+          </div>
+        </div>
+        {stages.map((st) => (
+          <div key={st.title} className="rounded-lg border border-line bg-graphite-800 px-3 py-2">
+            <p className="text-xs font-semibold text-ink">{t(st.title)}</p>
+            <p className="data mt-0.5 text-[11px] text-ink-dim">{t(st.sub)}</p>
+          </div>
+        ))}
+        <div className="rounded-lg border border-harmonized bg-graphite-700 px-3 py-2.5">
+          <p className="text-xs font-semibold text-ink">{t('method.d_out')}</p>
+          <p className="data mt-0.5 text-[11px] text-ink-dim">
+            {t('method.d_out_s1')} · {t('method.d_out_s2')} · {t('method.d_out_s3')}
+          </p>
+        </div>
+      </div>
+
+      <svg
+        viewBox="0 0 880 250"
+        className="hidden w-full sm:block"
+        role="img"
+        aria-label={t('method.diagram_aria')}
+      >
       <defs>
         <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
           <path d="M0 0L8 4L0 8z" fill={CHART.axis} />
@@ -61,6 +97,7 @@ function Diagram() {
       <text x="784" y="143" textAnchor="middle" className={sub}>{t('method.d_out_s2')}</text>
       <text x="784" y="160" textAnchor="middle" className={sub}>{t('method.d_out_s3')}</text>
     </svg>
+    </>
   );
 }
 
@@ -74,7 +111,7 @@ export function Methodology() {
           <strong className="font-semibold">{t('header.mock')}.</strong> {t('method.mock_note')}
         </p>
       )}
-      <div className="panel overflow-x-auto p-4 sm:p-5">
+      <div className="panel p-4 sm:p-5">
         <Diagram />
       </div>
       <ol className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -87,25 +124,30 @@ export function Methodology() {
         ))}
       </ol>
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <article className="panel p-4 sm:p-5">
+        <article className="panel min-w-0 p-4 sm:p-5">
           <h3 className="text-lg font-semibold">{t('method.unc_title')}</h3>
           <p className="mt-2 text-sm leading-relaxed text-ink-dim">{t('method.unc_body')}</p>
-          <p className="data mt-3 rounded-md bg-graphite-900/80 p-3 text-xs leading-relaxed text-ink">
-            H = Σ wᵢ·Êᵢ / Σ wᵢ, &nbsp; wᵢ = 1 / Var(Êᵢ)
-            <br />
-            Ê_MODIS = N_MODIS / c(t) &nbsp;·&nbsp; Ê_VIIRS = N_VIIRS / (k · n(t))
-            <br />
-            z = (log(1 + H) − μ_doy) / σ_doy
-          </p>
-          <p className="mt-2 text-xs leading-relaxed text-ink-mute">{t('method.unc_legend')}</p>
+          <details className="mt-3 text-xs">
+            <summary className="cursor-pointer select-none font-medium text-ink-dim hover:text-ink">
+              {t('trans.show_formula')}
+            </summary>
+            <p className="data mt-2 rounded-md bg-graphite-900/80 p-3 leading-relaxed text-ink">
+              H = Σ wᵢ·Êᵢ / Σ wᵢ, &nbsp; wᵢ = 1 / Var(Êᵢ)
+              <br />
+              Ê_MODIS = N_MODIS / c(t) &nbsp;·&nbsp; Ê_VIIRS = N_VIIRS / (k · n(t))
+              <br />
+              z = (log(1 + H) − μ_doy) / σ_doy
+            </p>
+            <p className="mt-2 leading-relaxed text-ink-mute">{t('method.unc_legend')}</p>
+          </details>
         </article>
-        <article className="panel p-4 sm:p-5">
+        <article className="panel min-w-0 p-4 sm:p-5">
           <h3 className="text-lg font-semibold">{t('method.lim_title')}</h3>
-          <ul className="mt-2 space-y-2 text-sm leading-relaxed text-ink-dim">
+          <ul className="mt-3 space-y-3 text-sm leading-relaxed text-ink-dim">
             {LIMITS.map((k) => (
-              <li key={k} className="flex gap-2">
+              <li key={k} className="flex gap-2.5">
                 <span aria-hidden className="mt-2 h-1 w-1 shrink-0 rounded-full bg-ink-mute" />
-                <span>{t(k)}</span>
+                <span className="min-w-0">{t(k)}</span>
               </li>
             ))}
           </ul>

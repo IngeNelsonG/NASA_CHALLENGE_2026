@@ -303,12 +303,14 @@ def _build_narratives(
             f"climatological median) in {m_en} {latest_ts.year}."
         )
 
+    persist_es = "1 mes consecutivo" if persistence == 1 else f"{persistence} meses consecutivos"
+    persist_en = "1 consecutive month" if persistence == 1 else f"{persistence} consecutive months"
     tech_es = (
         f"Evaluación determinista NASA FIRMS para {region_name} ({m_es} {latest_ts.year}): "
         f"{_fmt_es(latest_h)} detecciones armonizadas frente a mediana histórica de "
         f"{_fmt_es(med)} (RIC Q1\u2013Q3: {_fmt_es(q25)}\u2013{_fmt_es(q75)}; p90: "
         f"{_fmt_es(p90)}). Desviación: {z_es} (z robusto: {rz_es}); razón: {ratio_es}; "
-        f"persistencia: {persistence} mes(es) consecutivos sobre umbral."
+        f"persistencia: {persist_es} sobre umbral."
         f"{unseasonal_es}{oni_str_es}"
     )
     tech_en = (
@@ -316,7 +318,7 @@ def _build_narratives(
         f"{latest_h:,.0f} harmonized detections vs. historical median {med:,.0f} "
         f"(IQR Q1\u2013Q3: {q25:,.0f}\u2013{q75:,.0f}; p90: {p90:,.0f}). "
         f"Departure: {z_en} (robust z: {robust_z:+.2f}); ratio: {ratio_en}; "
-        f"persistence: {persistence} consecutive month(s) above threshold."
+        f"persistence: {persist_en} above threshold."
         f"{unseasonal_en}{oni_str_en}"
     )
 

@@ -7,6 +7,72 @@ import { useStore } from '@/store';
 
 const SUGGESTIONS: Key[] = ['analyst.q1', 'analyst.q2', 'analyst.q3'];
 
+/** Progressively parse streamed analyst text into title, bullets, and closing note. */
+function AnalystAnswer({ text, streaming }: { text: string; streaming: boolean }) {
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  let title = '';
+  const intro: string[] = [];
+  const bullets: string[] = [];
+  const closing: string[] = [];
+  let seenBullet = false;
+
+  for (const line of lines) {
+    if (line.startsWith('•')) {
+      seenBullet = true;
+      bullets.push(line.replace(/^•\s*/, ''));
+    } else if (!seenBullet) {
+      if (!title) title = line;
+      else intro.push(line);
+    } else {
+      closing.push(line);
+    }
+  }
+
+  const cursor = streaming ? (
+    <span aria-hidden className="ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-pulse bg-accent" />
+  ) : null;
+  const cursorTarget: 'closing' | 'bullet' | 'intro' | 'title' = closing.length
+    ? 'closing'
+    : bullets.length
+      ? 'bullet'
+      : intro.length
+        ? 'intro'
+        : 'title';
+
+  return (
+    <div className="space-y-2 text-sm leading-relaxed text-ink">
+      {title && (
+        <p className="font-semibold text-ink">
+          {title}
+          {cursorTarget === 'title' && cursor}
+        </p>
+      )}
+      {intro.map((line, i) => (
+        <p key={i} className="text-xs text-ink-dim">
+          {line}
+          {cursorTarget === 'intro' && i === intro.length - 1 && cursor}
+        </p>
+      ))}
+      {bullets.length > 0 && (
+        <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ink">
+          {bullets.map((b, i) => (
+            <li key={i}>
+              {b}
+              {cursorTarget === 'bullet' && i === bullets.length - 1 && cursor}
+            </li>
+          ))}
+        </ul>
+      )}
+      {closing.map((line, i) => (
+        <p key={i} className="pt-1 text-xs leading-relaxed text-ink-mute">
+          {line}
+          {cursorTarget === 'closing' && i === closing.length - 1 && cursor}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 /** Chat-style front end for POST /api/analyst (backend proxy to Claude, SSE streaming). */
 export function Analyst() {
   const t = useT();
@@ -74,12 +140,7 @@ export function Analyst() {
         <div className="mt-4 min-h-[9rem] rounded-lg border border-line bg-graphite-900/70 p-4" aria-live="polite" aria-busy={status === 'streaming'}>
           {status === 'idle' && <p className="text-sm text-ink-mute">{t('analyst.empty')}</p>}
           {asked && <p className="mb-3 text-sm font-semibold text-ink">› {asked}</p>}
-          {answer && (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">
-              {answer}
-              {status === 'streaming' && <span aria-hidden className="ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-pulse bg-accent" />}
-            </p>
-          )}
+          {answer && <AnalystAnswer text={answer} streaming={status === 'streaming'} />}
           {status === 'streaming' && !answer && <Spinner label={t('analyst.thinking')} />}
           {status === 'error' && (
             <p role="alert" className="text-sm text-ink">

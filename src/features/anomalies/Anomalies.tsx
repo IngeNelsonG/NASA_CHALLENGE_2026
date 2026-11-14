@@ -5,7 +5,7 @@ import { useCalendar } from '@/app/loaders';
 import { SectionHeading, Segmented, Spinner } from '@/components/ui';
 import { fireColor, HOTSPOT_COLOR, SENSOR_COLOR } from '@/lib/colors';
 import { api } from '@/lib/api';
-import { fmtPercent, fmtRatio, fmtSigma } from '@/lib/format';
+import { fmtPercent, fmtRatio, fmtSigma, fmtTempC } from '@/lib/format';
 import { bboxId } from '@/lib/geo';
 import type { AlertAssessment, BBox, EnsoPhase } from '@/lib/types';
 import { useStore } from '@/store';
@@ -351,7 +351,11 @@ export function Anomalies() {
             <div className="flex flex-wrap items-center gap-2">
               <p className="eyebrow">{t('anom.alert_eyebrow')}</p>
               {alertQ.data && (
-                <span className="chip">{alertQ.data.protocol}</span>
+                <span className="chip">
+                  {alertQ.data.protocol === 'CAP-1.2-deterministic'
+                    ? t('anom.protocol_cap')
+                    : alertQ.data.protocol}
+                </span>
               )}
             </div>
             <h3 className="card-title mt-1">
@@ -393,12 +397,21 @@ export function Anomalies() {
               <div>
                 <dt className="text-xs text-ink-mute">{t('anom.alert_persist')}</dt>
                 <dd className="data mt-0.5 text-sm text-ink">
-                  {alertQ.data.persistence_months} {t('anom.alert_months')}
+                  {alertQ.data.persistence_months === 1
+                    ? t('anom.alert_month_1')
+                    : t('anom.alert_months_n', { n: fmtInt(alertQ.data.persistence_months, lang) })}
                 </dd>
               </div>
               <div>
                 <dt className="text-xs text-ink-mute">{t('anom.alert_trend')}</dt>
                 <dd className="mt-0.5 text-sm text-ink">{t(`anom.alert_trend_${alertQ.data.trend_direction}`)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-ink-mute">{t('anom.alert_enso')}</dt>
+                <dd className="data mt-0.5 text-sm text-ink">
+                  {t(`enso.phase_${alertQ.data.enso_phase}` as Key)}
+                  {alertQ.data.oni_value != null ? ` (${fmtTempC(alertQ.data.oni_value, lang, 2)})` : ''}
+                </dd>
               </div>
               {alertQ.data.unseasonal && (
                 <div>
@@ -406,10 +419,20 @@ export function Anomalies() {
                   <dd className="mt-0.5 text-sm text-ink">{t('anom.alert_unseasonal')}</dd>
                 </div>
               )}
-              {alertQ.data.nrt_percent_of_normal != null && (
+              {(alertQ.data.nrt_detections != null || alertQ.data.nrt_percent_of_normal != null) && (
                 <div>
                   <dt className="text-xs text-ink-mute">{t('anom.alert_nrt')}</dt>
-                  <dd className="data mt-0.5 text-sm text-ink">{fmtPercent(alertQ.data.nrt_percent_of_normal, lang, 0)}</dd>
+                  <dd
+                    className={`data mt-0.5 text-sm ${
+                      (alertQ.data.nrt_percent_of_normal ?? 0) >= 200 ? 'font-semibold text-sev-warning' : 'text-ink'
+                    }`}
+                  >
+                    {alertQ.data.nrt_detections != null ? `${fmtInt(alertQ.data.nrt_detections, lang)} ${t('anom.det_abbr')}` : ''}
+                    {alertQ.data.nrt_detections != null && alertQ.data.nrt_percent_of_normal != null ? ' · ' : ''}
+                    {alertQ.data.nrt_percent_of_normal != null
+                      ? fmtPercent(alertQ.data.nrt_percent_of_normal, lang, 0)
+                      : ''}
+                  </dd>
                 </div>
               )}
             </dl>
@@ -524,8 +547,35 @@ export function Anomalies() {
                       <div className="data mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
                         <span>{fmtSigma(item.z_score, lang, 2)}</span>
                         <span>· {fmtRatio(item.anomaly_ratio, lang, 2)}</span>
-                        {item.persistence_months > 0 && <span>· {item.persistence_months}m</span>}
+                        {item.persistence_months > 0 && (
+                          <span>
+                            ·{' '}
+                            {item.persistence_months === 1
+                              ? t('anom.alert_month_1')
+                              : t('anom.alert_months_n', { n: fmtInt(item.persistence_months, lang) })}
+                          </span>
+                        )}
                       </div>
+                      <p className="data mt-1 text-xs text-ink-dim">
+                        {t('anom.card_counts', {
+                          latest: fmtInt(Math.round(item.latest_harmonized), lang),
+                          normal: fmtInt(Math.round(item.climatology_median), lang),
+                        })}
+                      </p>
+                      {item.nrt_detections != null && item.nrt_percent_of_normal != null && (
+                        <p
+                          className={`data mt-0.5 text-xs ${
+                            item.nrt_percent_of_normal >= 200
+                              ? 'font-semibold text-sev-warning'
+                              : 'text-ink-dim'
+                          }`}
+                        >
+                          {t('anom.card_nrt', {
+                            det: fmtInt(item.nrt_detections, lang),
+                            pct: fmtPercent(item.nrt_percent_of_normal, lang, 0),
+                          })}
+                        </p>
+                      )}
                       {item.authorities[0] && (
                         <p className="mt-1 truncate text-xs text-ink-mute">
                           {item.authorities.slice(0, 2).map((a) => a.code).join(' · ')}

@@ -316,7 +316,7 @@ def get_authorities_for_aoi(
             )
             contacts.append(
                 AuthorityContact(
-                    code=f"CDGRD-{department.upper()[:10].replace(' ', '')}",
+                    code=f"CDGRD {department}",
                     name=(
                         "Consejo Departamental para la Gestión del Riesgo de Desastres "
                         f"\u2014 Gobernación de {department}"

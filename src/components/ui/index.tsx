@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { reducedMotion } from '@/lib/capabilities';
 import { SENSOR_COLOR } from '@/lib/colors';
 import type { Sensor } from '@/lib/types';
@@ -35,19 +35,20 @@ export function Reveal({ children, delay = 0, className = '' }: { children: Reac
   );
 }
 
-/** Heading text whose words rise out of a mask, one after another. Screen readers get the plain text. */
+/** Heading text whose words rise out of a mask, one after another. */
 export function SplitWords({ text, step = 55 }: { text: string; step?: number }) {
   const [ref, inView] = useInView<HTMLSpanElement>(0.4);
+  const words = text.split(' ');
   return (
     <span ref={ref} className={`split ${inView ? 'is-in' : ''}`}>
-      <span className="sr-only">{text}</span>
-      <span aria-hidden>
-        {text.split(' ').map((w, i) => (
-          <span key={i} className="split-w mr-[0.24em] last:mr-0">
+      {words.map((w, i) => (
+        <Fragment key={i}>
+          <span className="split-w">
             <span style={{ transitionDelay: `${i * step}ms` }}>{w}</span>
           </span>
-        ))}
-      </span>
+          {i < words.length - 1 ? ' ' : null}
+        </Fragment>
+      ))}
     </span>
   );
 }
