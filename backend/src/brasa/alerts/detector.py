@@ -25,6 +25,7 @@ SEVERITY_LABELS: dict[AlertSeverity, tuple[str, str]] = {
 }
 
 ENSO_THRESHOLD = 0.5
+ONI_LOOKBACK_MONTHS = 3
 MONTHS_IN_YEAR = 12
 MIN_PERSISTENCE_MONTHS = 2
 MIN_PERSISTENCE_COUNT = 3.0
@@ -66,6 +67,21 @@ def _enso_phase(oni: float | None) -> EnsoPhase:
     if oni <= -ENSO_THRESHOLD:
         return "LA_NINA"
     return "NEUTRAL"
+
+
+def _resolve_oni(ordered: Sequence[Mapping[str, Any]], latest_ts: pd.Timestamp) -> float | None:
+    """Return latest ONI, falling back to the most recent non-null value within 3 prior months."""
+    for row in reversed(ordered):
+        ts = pd.Timestamp(row["month"])
+        months_ago = (latest_ts.year - ts.year) * MONTHS_IN_YEAR + (latest_ts.month - ts.month)
+        if months_ago < 0:
+            continue
+        if months_ago > ONI_LOOKBACK_MONTHS:
+            break
+        val = row.get("oni")
+        if val is not None and not pd.isna(val):
+            return float(val)
+    return None
 
 
 def _fmt_es(val: float, decimals: int = 0) -> str:
@@ -426,8 +442,7 @@ def evaluate_rows(
         and z >= UNSEASONAL_Z_MIN
         and latest_h > max(q75, UNSEASONAL_COUNT_FLOOR)
     )
-    oni = latest.get("oni")
-    oni_val = float(oni) if oni is not None else None
+    oni_val = _resolve_oni(ordered, latest_ts)
     enso = _enso_phase(oni_val)
 
     severity = _classify_severity(

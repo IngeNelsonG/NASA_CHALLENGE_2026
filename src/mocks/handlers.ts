@@ -1,5 +1,16 @@
 // Mock backend: answers every /api/* route with a real Response, honouring the contracts in lib/types.ts.
-import type { AnalystHighlight, AnalystRequest, Anomaly, BBox, CalendarResponse, RawSensor, Resolution } from '@/lib/types';
+import type {
+  AnalystHighlight,
+  AnalystRequest,
+  Anomaly,
+  BBox,
+  CalendarResponse,
+  EnsoEpisode,
+  EnsoResponse,
+  EnsoSeriesPoint,
+  RawSensor,
+  Resolution,
+} from '@/lib/types';
 import { resolveAoi, searchAois } from './aois';
 import { calendar, hotspots } from './model';
 import tle from './tle.json';
@@ -41,6 +52,85 @@ function anomaliesFor(bbox: BBox): Anomaly[] {
   }
   flush();
   return out.sort((a, b) => Math.abs(b.zScore) - Math.abs(a.zScore)).slice(0, 24);
+}
+
+function syntheticEnso(bbox: BBox): EnsoResponse {
+  const { cells } = calendar(bbox, '2000-01-01', today(), 'month');
+  const zByMonth = new Map(cells.map((c) => [c.date, c.anomalyZ ?? null]));
+  const series: EnsoSeriesPoint[] = [];
+  const endYr = 2026;
+  const endMo = 9;
+  for (let yr = 2000; yr <= endYr; yr++) {
+    const maxMo = yr === endYr ? endMo : 12;
+    for (let mo = 1; mo <= maxMo; mo++) {
+      const t = (yr - 2000) * 12 + (mo - 1);
+      const iso = `${yr}-${String(mo).padStart(2, '0')}-01`;
+      let oni = Number((1.15 * Math.sin(t * 0.145) + 0.65 * Math.cos(t * 0.082)).toFixed(2));
+      if (yr === 2026 && mo >= 5) oni = Number(Math.min(2.46, 0.95 + (mo - 5) * 0.38).toFixed(2));
+      series.push({ month: iso, oni, z: zByMonth.get(iso) ?? null });
+    }
+  }
+  const elVals: number[] = [];
+  const laVals: number[] = [];
+  const neuVals: number[] = [];
+  for (let i = 0; i + 2 < series.length; i++) {
+    const o = series[i].oni;
+    const z = series[i + 2].z;
+    if (o == null || z == null) continue;
+    if (o >= 0.5) elVals.push(z);
+    else if (o <= -0.5) laVals.push(z);
+    else neuVals.push(z);
+  }
+  const mean = (arr: number[]) => (arr.length ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2)) : null);
+  const episodes: EnsoEpisode[] = [];
+  let runStart = -1;
+  let runPhase: 'EL_NINO' | 'LA_NINA' | null = null;
+  const flush = (endIdx: number) => {
+    if (!runPhase || runStart < 0 || endIdx - runStart + 1 < 5) return;
+    let peak = 0;
+    let zs = 0;
+    let zn = 0;
+    for (let j = runStart; j <= endIdx; j++) {
+      const o = series[j].oni ?? 0;
+      if (Math.abs(o) > Math.abs(peak)) peak = o;
+    }
+    for (let j = runStart; j <= Math.min(series.length - 1, endIdx + 2); j++) {
+      const z = series[j].z;
+      if (z != null) (zs += z), zn++;
+    }
+    episodes.push({
+      phase: runPhase,
+      start: series[runStart].month,
+      end: series[endIdx].month,
+      peak_oni: peak,
+      fire_z: zn ? Number((zs / zn).toFixed(2)) : null,
+    });
+  };
+  for (let i = 0; i < series.length; i++) {
+    const o = series[i].oni ?? 0;
+    const ph = o >= 0.5 ? 'EL_NINO' : o <= -0.5 ? 'LA_NINA' : null;
+    if (ph && ph === runPhase) continue;
+    flush(i - 1);
+    runStart = ph ? i : -1;
+    runPhase = ph;
+  }
+  flush(series.length - 1);
+  const last = series[series.length - 1];
+  return {
+    current: { month: last.month, oni: last.oni, phase: 'EL_NINO', strength: 'very_strong' },
+    series,
+    episodes,
+    impact: {
+      lag_months: 2,
+      r: 0.34,
+      n: elVals.length + laVals.length + neuVals.length,
+      phases: {
+        EL_NINO: { months: elVals.length, mean_z: mean(elVals) },
+        LA_NINA: { months: laVals.length, mean_z: mean(laVals) },
+        NEUTRAL: { months: neuVals.length, mean_z: mean(neuVals) },
+      },
+    },
+  };
 }
 
 const MONTHS = {
@@ -142,6 +232,12 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     if (!aoi) return jsonRes({ error: 'unknown aoi' }, 404);
     await sleep(100);
     return jsonRes(anomaliesFor(aoi.bbox));
+  }
+  if (route === '/api/enso') {
+    const aoi = resolveAoi(q.get('aoi') ?? '');
+    if (!aoi) return jsonRes({ error: 'unknown aoi' }, 404);
+    await sleep(100);
+    return jsonRes(syntheticEnso(aoi.bbox));
   }
   if (route === '/api/aoi/geometry') {
     const aoi = resolveAoi(q.get('aoi') ?? '');

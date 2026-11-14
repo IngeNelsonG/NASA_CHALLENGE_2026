@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { fmtInt as fmtIntImpl, localeFor } from '@/lib/format';
 import { useStore, type Lang } from '@/store';
 import { en } from './locales/en';
 import { es } from './locales/es';
@@ -18,8 +19,8 @@ export function useT() {
   return useCallback((key: Key, vars?: Record<string, string | number>) => translate(lang, key, vars), [lang]);
 }
 
-export const locale = (lang: Lang) => (lang === 'es' ? 'es-CO' : 'en-GB');
-export const fmtInt = (n: number, lang: Lang) => Math.round(n).toLocaleString(locale(lang));
+export const locale = localeFor;
+export const fmtInt = fmtIntImpl;
 
 const utc = (iso: string) => new Date(iso.slice(0, 10) + 'T00:00:00Z');
 export const fmtDay = (iso: string, lang: Lang) =>

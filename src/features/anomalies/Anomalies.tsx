@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fmtInt, fmtMonth, monthName, useT } from '@/app/i18n';
+import { fmtInt, fmtMonth, monthName, useT, type Key } from '@/app/i18n';
 import { useCalendar } from '@/app/loaders';
 import { SectionHeading, Segmented, Spinner } from '@/components/ui';
 import { fireColor, HOTSPOT_COLOR, SENSOR_COLOR } from '@/lib/colors';
 import { api } from '@/lib/api';
+import { fmtPercent, fmtRatio, fmtSigma } from '@/lib/format';
 import { bboxId } from '@/lib/geo';
-import type { AlertAssessment, BBox } from '@/lib/types';
+import type { AlertAssessment, BBox, EnsoPhase } from '@/lib/types';
 import { useStore } from '@/store';
+import { EnsoPanel } from './EnsoPanel';
 
 const HOT = HOTSPOT_COLOR;
 const COOL = SENSOR_COLOR.viirs;
@@ -129,7 +131,26 @@ export function Anomalies() {
     staleTime: 5 * 60_000,
     enabled: nearViewport,
   });
+  const ensoQ = useQuery({
+    queryKey: ['enso', aoi.id],
+    queryFn: ({ signal }) => api.enso(aoi.id, signal),
+    enabled: nearViewport,
+  });
   const monthly = useCalendar('month');
+
+  const oniByMonth = useMemo(() => {
+    const map = new Map<string, number | null>();
+    for (const pt of ensoQ.data?.series ?? []) map.set(pt.month.slice(0, 7), pt.oni);
+    return map;
+  }, [ensoQ.data]);
+
+  const phaseForMonth = (iso: string): EnsoPhase | null => {
+    const oni = oniByMonth.get(iso.slice(0, 7));
+    if (oni == null) return null;
+    if (oni >= 0.5) return 'EL_NINO';
+    if (oni <= -0.5) return 'LA_NINA';
+    return 'NEUTRAL';
+  };
 
   const requestGpsLocation = () => {
     if (!navigator.geolocation) {
@@ -257,20 +278,25 @@ export function Anomalies() {
                 const pos = a.zScore > 0;
                 const w = (Math.abs(a.zScore) / zMax) * 50;
                 const same = a.start.slice(0, 7) === a.end.slice(0, 7);
+                const ensoPhase = phaseForMonth(a.start);
                 return (
                   <li key={a.start + a.end}>
                     <button type="button" onClick={() => open(a.start)} title={a.label} className="grid w-full grid-cols-[minmax(7.5rem,auto)_1fr_auto] items-center gap-3 rounded-md px-1 py-2 text-left hover:bg-white/[0.04]">
-                      <span className="data text-sm text-ink">
-                        {fmtMonth(a.start, lang)}
-                        {!same && <> – {fmtMonth(a.end, lang)}</>}
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="data text-sm text-ink">
+                          {fmtMonth(a.start, lang)}
+                          {!same && <> – {fmtMonth(a.end, lang)}</>}
+                        </span>
+                        {ensoPhase && (
+                          <span className="chip !px-2 !py-0.5 text-[11px]">{t(`enso.phase_${ensoPhase}` as Key)}</span>
+                        )}
                       </span>
                       <span aria-hidden className="relative h-3">
                         <span className="absolute inset-y-0 left-1/2 w-px bg-ink-mute" />
                         <span className="absolute inset-y-0 rounded-sm" style={pos ? { left: 'calc(50% + 1px)', width: `${w}%`, background: HOT } : { right: 'calc(50% + 1px)', width: `${w}%`, background: COOL }} />
                       </span>
-                      <span className="data w-24 text-right text-sm text-ink">
-                        {pos ? '+' : '−'}
-                        {Math.abs(a.zScore).toFixed(1)} σ <span className="text-xs text-ink-dim">{t(pos ? 'anom.above' : 'anom.below')}</span>
+                      <span className="data w-28 text-right text-sm text-ink">
+                        {fmtSigma(a.zScore, lang, 1)} <span className="text-xs text-ink-dim">{t(pos ? 'anom.above' : 'anom.below')}</span>
                       </span>
                     </button>
                   </li>
@@ -281,6 +307,8 @@ export function Anomalies() {
           <p className="mt-3 text-xs leading-relaxed text-ink-mute">{t('anom.list_note')}</p>
         </article>
       </div>
+
+      <EnsoPanel aoiName={aoi.name} lang={lang} data={ensoQ.data} isPending={ensoQ.isPending} isError={ensoQ.isError} />
 
       {/* Deterministic Early-Warning Alert Routing (CAP-1.2) */}
       <article className="panel mt-6 p-5 sm:p-6">
@@ -293,10 +321,7 @@ export function Anomalies() {
                 <i aria-hidden className={`h-1.5 w-1.5 rounded-full ${severityDotClass(visitorQ.data.severity)}`} />
                 {lang === 'es' ? visitorQ.data.severity_label_es : visitorQ.data.severity_label_en}
               </span>
-              <span className="data text-ink-dim">
-                ({visitorQ.data.z_score >= 0 ? '+' : '−'}
-                {Math.abs(visitorQ.data.z_score).toFixed(2)} σ)
-              </span>
+              <span className="data text-ink-dim">({fmtSigma(visitorQ.data.z_score, lang, 2)})</span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {visitorQ.data.aoi_id !== aoi.id && (
@@ -359,14 +384,11 @@ export function Anomalies() {
             <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
               <div>
                 <dt className="text-xs text-ink-mute">{t('cal.anomaly')}</dt>
-                <dd className="data mt-0.5 text-sm text-ink">
-                  {alertQ.data.z_score >= 0 ? '+' : '−'}
-                  {Math.abs(alertQ.data.z_score).toFixed(2)} σ
-                </dd>
+                <dd className="data mt-0.5 text-sm text-ink">{fmtSigma(alertQ.data.z_score, lang, 2)}</dd>
               </div>
               <div>
                 <dt className="text-xs text-ink-mute">{t('anom.alert_ratio')}</dt>
-                <dd className="data mt-0.5 text-sm text-ink">{alertQ.data.anomaly_ratio.toFixed(2)}×</dd>
+                <dd className="data mt-0.5 text-sm text-ink">{fmtRatio(alertQ.data.anomaly_ratio, lang, 2)}</dd>
               </div>
               <div>
                 <dt className="text-xs text-ink-mute">{t('anom.alert_persist')}</dt>
@@ -387,7 +409,7 @@ export function Anomalies() {
               {alertQ.data.nrt_percent_of_normal != null && (
                 <div>
                   <dt className="text-xs text-ink-mute">{t('anom.alert_nrt')}</dt>
-                  <dd className="data mt-0.5 text-sm text-ink">{alertQ.data.nrt_percent_of_normal.toFixed(0)} %</dd>
+                  <dd className="data mt-0.5 text-sm text-ink">{fmtPercent(alertQ.data.nrt_percent_of_normal, lang, 0)}</dd>
                 </div>
               )}
             </dl>
@@ -500,11 +522,8 @@ export function Anomalies() {
                         </span>
                       </div>
                       <div className="data mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-dim">
-                        <span>
-                          {item.z_score >= 0 ? '+' : '−'}
-                          {Math.abs(item.z_score).toFixed(2)} σ
-                        </span>
-                        <span>· {item.anomaly_ratio.toFixed(2)}×</span>
+                        <span>{fmtSigma(item.z_score, lang, 2)}</span>
+                        <span>· {fmtRatio(item.anomaly_ratio, lang, 2)}</span>
                         {item.persistence_months > 0 && <span>· {item.persistence_months}m</span>}
                       </div>
                       {item.authorities[0] && (

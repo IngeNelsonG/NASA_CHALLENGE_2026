@@ -7,6 +7,7 @@ import type {
   Anomaly,
   BBox,
   CalendarResponse,
+  EnsoResponse,
   Hotspot,
   HotspotCoverage,
   RawSensor,
@@ -57,6 +58,7 @@ export const api = {
   hotspotsCoverage: (p: { bbox: BBox; from: string; to: string }, signal?: AbortSignal) =>
     json<HotspotCoverage>(`/api/hotspots/coverage?${qs({ bbox: p.bbox.join(','), from: p.from, to: p.to })}`, signal),
   anomalies: (aoi: string, signal?: AbortSignal) => json<Anomaly[]>(`/api/anomalies?${qs({ aoi })}`, signal),
+  enso: (aoi: string, signal?: AbortSignal) => json<EnsoResponse>(`/api/enso?${qs({ aoi })}`, signal),
   alerts: (aoi: string, signal?: AbortSignal) => json<AlertAssessment>(`/api/alerts?${qs({ aoi })}`, signal),
   alertsOverview: (signal?: AbortSignal) => json<AlertsOverview>('/api/alerts/overview', signal),
   tle: (signal?: AbortSignal) => json<TLE[]>('/api/satellites/tle', signal),

@@ -14,7 +14,7 @@ import math
 import time
 import unicodedata
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -26,7 +26,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from brasa.alerts.detector import evaluate_rows
+from brasa.alerts.detector import ENSO_THRESHOLD, _enso_phase, evaluate_rows
 from brasa.alerts.schemas import AlertItem
 from brasa.api.hotspot_sources import (
     FIRMS_MAX_SPAN_DAYS,
@@ -36,6 +36,7 @@ from brasa.api.hotspot_sources import (
     merge_geometries,
 )
 from brasa.api.service import (
+    ONI_FILE,
     PROCESSED_DETECTIONS,
     CalendarService,
     CountryCalendars,
@@ -47,6 +48,7 @@ from brasa.domain.models import COLOMBIA, BoundingBox, InvalidBoundingBoxError
 from brasa.harmonization import aggregate_monthly, fit_sensor_ratio
 from brasa.harmonization.calibrate import InsufficientOverlapError, SensorRatio
 from brasa.ingestion.boundaries import geometry_bbox
+from brasa.ingestion.oni import OniTable, load_oni
 from brasa.ingestion.recent import RecentSource
 
 logger = logging.getLogger(__name__)
@@ -66,6 +68,13 @@ ANOM_NEG_MIN_Z = -1.8
 ANOM_NEG_MIN_COUNT = 20.0
 SOLAR_DAWN_HOUR = 6.0
 SOLAR_DUSK_HOUR = 18.0
+ENSO_SERIES_START = date(2000, 1, 1)
+ENSO_MODERATE_ONI = 1.0
+ENSO_STRONG_ONI = 1.5
+ENSO_VERY_STRONG_ONI = 2.0
+ENSO_EPISODE_MIN_MONTHS = 5
+ENSO_MAX_LAG_MONTHS = 6
+ENSO_MIN_CORR_SAMPLES = 24
 DETECTION_COLS = [
     "latitude",
     "longitude",
@@ -717,6 +726,7 @@ class _EmberContext:
     parquet_path: Path
     export_path: Path | None
     has_parquet: bool
+    oni_table: OniTable = field(default_factory=dict)
     firms: FirmsHotspots | None = None
     department_collection: dict[str, Any] | None = None
     world_collection: Mapping[str, list[dict[str, Any]]] | None = None
@@ -1578,6 +1588,188 @@ def _build_alerts_overview(
     return AlertsOverviewResponse(countries=country_items, colombia=colombia_items)
 
 
+def _enso_strength(
+    oni: float | None,
+) -> Literal["weak", "moderate", "strong", "very_strong"] | None:
+    if oni is None:
+        return None
+    mag = abs(oni)
+    if mag < ENSO_THRESHOLD:
+        return None
+    if mag < ENSO_MODERATE_ONI:
+        return "weak"
+    if mag < ENSO_STRONG_ONI:
+        return "moderate"
+    if mag < ENSO_VERY_STRONG_ONI:
+        return "strong"
+    return "very_strong"
+
+
+def _pearson_r(xs: list[float], ys: list[float]) -> float | None:
+    if len(xs) < ENSO_MIN_CORR_SAMPLES:
+        return None
+    arr_x = np.asarray(xs, dtype=float)
+    arr_y = np.asarray(ys, dtype=float)
+    if float(arr_x.std()) == 0.0 or float(arr_y.std()) == 0.0:
+        return None
+    corr = float(np.corrcoef(arr_x, arr_y)[0, 1])
+    return None if math.isnan(corr) else corr
+
+
+def _select_enso_lag(series: Sequence[Mapping[str, Any]]) -> tuple[int, float | None, int]:
+    best_lag = 0
+    best_r: float | None = None
+    best_n = 0
+    lag0_n = 0
+    for lag in range(ENSO_MAX_LAG_MONTHS + 1):
+        xs: list[float] = []
+        ys: list[float] = []
+        for idx in range(len(series) - lag):
+            oni_v = series[idx]["oni"]
+            z_v = series[idx + lag]["z"]
+            if oni_v is not None and z_v is not None:
+                xs.append(float(oni_v))
+                ys.append(float(z_v))
+        if lag == 0:
+            lag0_n = len(xs)
+        corr = _pearson_r(xs, ys)
+        if corr is not None and (best_r is None or abs(corr) > abs(best_r)):
+            best_lag = lag
+            best_r = corr
+            best_n = len(xs)
+    if best_r is None:
+        return 0, None, lag0_n
+    return best_lag, round(best_r, 3), best_n
+
+
+def _compute_phase_means(
+    series: Sequence[Mapping[str, Any]], lag_months: int
+) -> dict[str, dict[str, Any]]:
+    buckets: dict[str, list[float]] = {"EL_NINO": [], "LA_NINA": [], "NEUTRAL": []}
+    for idx in range(len(series) - lag_months):
+        oni_v = series[idx]["oni"]
+        z_v = series[idx + lag_months]["z"]
+        if oni_v is None or z_v is None:
+            continue
+        phase = _enso_phase(float(oni_v))
+        if phase in buckets:
+            buckets[phase].append(float(z_v))
+    return {
+        phase: {
+            "months": len(vals),
+            "mean_z": round(sum(vals) / len(vals), 2) if vals else None,
+        }
+        for phase, vals in buckets.items()
+    }
+
+
+def _detect_enso_episodes(
+    series: Sequence[Mapping[str, Any]], lag_months: int
+) -> list[dict[str, Any]]:
+    episodes: list[dict[str, Any]] = []
+    run: list[int] = []
+    run_phase: str | None = None
+
+    def _flush() -> None:
+        nonlocal run, run_phase
+        if run_phase in {"EL_NINO", "LA_NINA"} and len(run) >= ENSO_EPISODE_MIN_MONTHS:
+            start_i, end_i = run[0], run[-1]
+            peak_oni = max((float(series[j]["oni"]) for j in run), key=abs)
+            ext_end = min(len(series) - 1, end_i + lag_months)
+            z_vals = [
+                float(series[j]["z"])
+                for j in range(start_i, ext_end + 1)
+                if series[j]["z"] is not None
+            ]
+            episodes.append(
+                {
+                    "phase": run_phase,
+                    "start": series[start_i]["month"],
+                    "end": series[end_i]["month"],
+                    "peak_oni": round(peak_oni, 2),
+                    "fire_z": round(sum(z_vals) / len(z_vals), 2) if z_vals else None,
+                }
+            )
+        run = []
+        run_phase = None
+
+    for idx, item in enumerate(series):
+        oni_v = item["oni"]
+        phase = _enso_phase(float(oni_v)) if oni_v is not None else "UNKNOWN"
+        if phase in {"EL_NINO", "LA_NINA"}:
+            if phase == run_phase:
+                run.append(idx)
+            else:
+                _flush()
+                run = [idx]
+                run_phase = phase
+        else:
+            _flush()
+    _flush()
+    return episodes
+
+
+def _compute_enso_payload(
+    oni_table: OniTable, cells: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
+    if not oni_table:
+        return {
+            "current": {"month": None, "oni": None, "phase": "UNKNOWN", "strength": None},
+            "series": [],
+            "episodes": [],
+            "impact": {
+                "lag_months": 0,
+                "r": None,
+                "n": 0,
+                "phases": {
+                    "EL_NINO": {"months": 0, "mean_z": None},
+                    "LA_NINA": {"months": 0, "mean_z": None},
+                    "NEUTRAL": {"months": 0, "mean_z": None},
+                },
+            },
+        }
+    z_by_month = {str(c["date"]): c.get("anomalyZ") for c in cells}
+    latest_yr, latest_mo = max(oni_table.keys())
+    end_month = date(latest_yr, latest_mo, 1)
+
+    series: list[dict[str, Any]] = []
+    cur = ENSO_SERIES_START
+    while cur <= end_month:
+        iso = cur.isoformat()
+        oni_val = oni_table.get((cur.year, cur.month))
+        z_raw = z_by_month.get(iso)
+        series.append(
+            {
+                "month": iso,
+                "oni": round(float(oni_val), 2) if oni_val is not None else None,
+                "z": round(float(z_raw), 2) if z_raw is not None else None,
+            }
+        )
+        cur = _next_month_start(cur)
+
+    lag_months, r_val, n_samples = _select_enso_lag(series)
+    phases = _compute_phase_means(series, lag_months)
+    episodes = _detect_enso_episodes(series, lag_months)
+    latest_entry = series[-1]
+    cur_oni = latest_entry["oni"]
+    return {
+        "current": {
+            "month": latest_entry["month"],
+            "oni": cur_oni,
+            "phase": _enso_phase(cur_oni),
+            "strength": _enso_strength(cur_oni),
+        },
+        "series": series,
+        "episodes": episodes,
+        "impact": {
+            "lag_months": lag_months,
+            "r": r_val,
+            "n": n_samples,
+            "phases": phases,
+        },
+    }
+
+
 def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> None:
     @lru_cache(maxsize=4)
     def _cached_overview(
@@ -1595,10 +1787,23 @@ def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> 
         latest = ctx.recent_src.get() if ctx.recent_src is not None else None
         return _evaluate_entry_alert(ctx, entry, as_of=as_of_key, latest_recent=latest)
 
+    @lru_cache(maxsize=64)
+    def _cached_enso(entry_id: str, recent_stamp: str | None) -> dict[str, Any]:
+        _ = recent_stamp
+        cal = build_cal(entry_id, "2000-01-01", date.today().isoformat(), "month", recent_stamp)
+        return _compute_enso_payload(ctx.oni_table, cal["cells"])
+
     @app.get("/api/anomalies")
     def api_anomalies(aoi: str = Query(max_length=120)) -> list[dict[str, Any]]:
         cal = build_cal(aoi, "2000-01-01", date.today().isoformat(), "month", _recent_stamp(ctx))
         return _detect_anomalies_from_cells(cal["cells"])
+
+    @app.get("/api/enso")
+    def api_enso(aoi: str = Query(max_length=120)) -> dict[str, Any]:
+        entry = _resolve_aoi_id(aoi, ctx.aoi_by_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail=f"Unknown AOI: {aoi}")
+        return _cached_enso(entry.id, _recent_stamp(ctx))
 
     @app.get("/api/alerts/overview", response_model=AlertsOverviewResponse)
     def api_alerts_overview(
@@ -1676,6 +1881,12 @@ def register_ember_routes(
     aoi_by_id, aoi_ordered = _build_aoi_index(department_collection, world_collection, countries)
     export_path = getattr(service, "export_path", None)
     parquet_path = export_path or (data_dir / PROCESSED_DETECTIONS)
+    oni_table: OniTable = {
+        **(getattr(countries, "oni", None) or {}),
+        **(getattr(service, "oni", None) or {}),
+    }
+    if not oni_table:
+        oni_table = load_oni(data_dir / ONI_FILE)
     ctx = _EmberContext(
         service=service,
         countries=countries,
@@ -1685,6 +1896,7 @@ def register_ember_routes(
         parquet_path=parquet_path,
         export_path=export_path,
         has_parquet=parquet_path.exists(),
+        oni_table=oni_table,
         firms=firms,
         department_collection=department_collection,
         world_collection=world_collection,

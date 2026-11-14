@@ -124,3 +124,41 @@ def test_api_v1_alerts_endpoint_scan_and_filter() -> None:
     assert len(dept_body["alerts"]) == 1
     assert any("CORPOBOYACÁ" in a["code"] for a in dept_body["alerts"][0]["authorities"])
     assert dept_body["alerts"][0]["reference_month"] <= date.today().isoformat()
+
+
+def test_evaluate_rows_falls_back_to_recent_oni_within_3_months() -> None:
+    rows = _synthetic_history(45.0, oni=None)
+    # _synthetic_history ends at 2024-02-01 (with oni=None). Put ONI on 2023-12-01 (2 months prior).
+    for r in rows:
+        if r["month"] == pd.Timestamp("2023-12-01"):
+            r["oni"] = 1.85
+        elif r["month"] > pd.Timestamp("2023-12-01"):
+            r["oni"] = None
+
+    recent = evaluate_rows(
+        rows,
+        aoi_id="co-meta",
+        region_name="Meta",
+        department="Meta",
+        country="Colombia",
+    )
+    assert recent.oni_value == 1.85
+    assert recent.enso_phase == "EL_NINO"
+
+    # When the only non-null ONI is > 3 months older than reference month, phase stays UNKNOWN.
+    stale_rows = [dict(r) for r in rows]
+    for r in stale_rows:
+        if r["month"] > pd.Timestamp("2023-10-01"):
+            r["oni"] = None
+        elif r["month"] == pd.Timestamp("2023-10-01"):
+            r["oni"] = 1.85
+
+    stale = evaluate_rows(
+        stale_rows,
+        aoi_id="co-meta",
+        region_name="Meta",
+        department="Meta",
+        country="Colombia",
+    )
+    assert stale.oni_value is None
+    assert stale.enso_phase == "UNKNOWN"

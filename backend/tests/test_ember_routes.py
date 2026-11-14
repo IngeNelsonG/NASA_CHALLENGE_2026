@@ -1,13 +1,20 @@
 """Integration tests for the unified /api/* compatibility endpoints (ember_routes)."""
 
+import math
 from pathlib import Path
 
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+from brasa.alerts.detector import _enso_phase
 from brasa.api.app import create_app
-from brasa.api.ember_routes import _point_in_geometry
+from brasa.api.ember_routes import (
+    _compute_enso_payload,
+    _detect_enso_episodes,
+    _enso_strength,
+    _point_in_geometry,
+)
 from brasa.api.service import CalendarService, CountryCalendars
 from brasa.config import Settings
 from brasa.ingestion.boundaries import load_departments
@@ -158,3 +165,72 @@ def test_point_in_geometry_respects_hole() -> None:
     assert _point_in_geometry(1.0, 1.0, poly) is True
     assert _point_in_geometry(5.0, 5.0, poly) is False
     assert _point_in_geometry(15.0, 5.0, poly) is False
+
+
+def test_enso_phase_and_strength_thresholds() -> None:
+    assert (_enso_phase(0.49), _enso_strength(0.49)) == ("NEUTRAL", None)
+    assert (_enso_phase(-0.49), _enso_strength(-0.49)) == ("NEUTRAL", None)
+    assert (_enso_phase(0.5), _enso_strength(0.5)) == ("EL_NINO", "weak")
+    assert (_enso_phase(0.99), _enso_strength(0.99)) == ("EL_NINO", "weak")
+    assert (_enso_phase(1.0), _enso_strength(1.0)) == ("EL_NINO", "moderate")
+    assert (_enso_phase(1.49), _enso_strength(1.49)) == ("EL_NINO", "moderate")
+    assert (_enso_phase(-1.5), _enso_strength(-1.5)) == ("LA_NINA", "strong")
+    assert (_enso_phase(2.0), _enso_strength(2.0)) == ("EL_NINO", "very_strong")
+    assert (_enso_phase(None), _enso_strength(None)) == ("UNKNOWN", None)
+
+
+def test_enso_episode_detection_requires_five_consecutive_months() -> None:
+    series = [
+        # 4 consecutive months -> NOT an episode
+        {"month": "2010-01-01", "oni": 0.6, "z": 0.1},
+        {"month": "2010-02-01", "oni": 0.7, "z": 0.2},
+        {"month": "2010-03-01", "oni": 0.8, "z": 0.3},
+        {"month": "2010-04-01", "oni": 0.6, "z": 0.2},
+        {"month": "2010-05-01", "oni": 0.3, "z": 0.0},
+        # 5 consecutive months -> El Niño episode
+        {"month": "2010-06-01", "oni": 0.5, "z": 0.4},
+        {"month": "2010-07-01", "oni": 1.1, "z": 0.6},
+        {"month": "2010-08-01", "oni": 1.6, "z": 1.0},
+        {"month": "2010-09-01", "oni": 1.2, "z": 0.8},
+        {"month": "2010-10-01", "oni": 0.7, "z": 0.4},
+        {"month": "2010-11-01", "oni": 0.1, "z": 1.2},
+        {"month": "2010-12-01", "oni": -0.2, "z": 0.0},
+    ]
+    episodes = _detect_enso_episodes(series, lag_months=1)
+    assert len(episodes) == 1
+    ep = episodes[0]
+    assert ep["phase"] == "EL_NINO"
+    assert ep["start"] == "2010-06-01"
+    assert ep["end"] == "2010-10-01"
+    assert ep["peak_oni"] == 1.6
+    # Mean over Jun..Nov (extended by lag=1): (0.4+0.6+1.0+0.8+0.4+1.2)/6 = 0.73
+    assert ep["fire_z"] == 0.73
+
+
+def test_enso_lag_selection_detects_shifted_response() -> None:
+    # Build 36 months where z(t+2) == oni(t)
+    months = pd.date_range("2000-01-01", periods=36, freq="MS").date
+    oni_vals = [1.5 * math.sin(i * 0.4) for i in range(36)]
+    oni_table = {(d.year, d.month): round(oni_vals[i], 2) for i, d in enumerate(months)}
+    cells = [
+        {"date": d.isoformat(), "anomalyZ": round(oni_vals[i - 2], 2) if i >= 2 else None}
+        for i, d in enumerate(months)
+    ]
+    payload = _compute_enso_payload(oni_table, cells)
+    assert payload["impact"]["lag_months"] == 2
+    assert payload["impact"]["r"] is not None
+    assert payload["impact"]["r"] >= 0.99
+    assert payload["impact"]["n"] >= 24
+
+
+def test_enso_endpoint_returns_payload_and_404_for_unknown(ember_client: TestClient) -> None:
+    res = ember_client.get("/api/enso", params={"aoi": "co"})
+    assert res.status_code == 200
+    body = res.json()
+    assert set(body.keys()) == {"current", "series", "episodes", "impact"}
+    assert body["current"]["phase"] in {"EL_NINO", "LA_NINA", "NEUTRAL", "UNKNOWN"}
+    assert len(body["series"]) > 200
+    assert body["series"][0]["month"] == "2000-01-01"
+
+    missing = ember_client.get("/api/enso", params={"aoi": "unknown-place-xyz"})
+    assert missing.status_code == 404

@@ -67,6 +67,50 @@ export type AnalystRequest = {
 // The stream ends with a JSON payload: { highlights: [...] }
 export type AnalystHighlight = { date: string; reason: string };
 
+export type EnsoPhase = 'EL_NINO' | 'LA_NINA' | 'NEUTRAL' | 'UNKNOWN';
+export type EnsoStrength = 'weak' | 'moderate' | 'strong' | 'very_strong';
+
+// GET /api/enso?aoi=ID
+export type EnsoSeriesPoint = {
+  month: string;
+  oni: number | null;
+  z: number | null;
+};
+
+export type EnsoEpisode = {
+  phase: 'EL_NINO' | 'LA_NINA';
+  start: string;
+  end: string;
+  peak_oni: number;
+  fire_z: number | null;
+};
+
+export type EnsoPhaseStats = {
+  months: number;
+  mean_z: number | null;
+};
+
+export type EnsoResponse = {
+  current: {
+    month: string | null;
+    oni: number | null;
+    phase: EnsoPhase;
+    strength: EnsoStrength | null;
+  };
+  series: EnsoSeriesPoint[];
+  episodes: EnsoEpisode[];
+  impact: {
+    lag_months: number;
+    r: number | null;
+    n: number;
+    phases: {
+      EL_NINO: EnsoPhaseStats;
+      LA_NINA: EnsoPhaseStats;
+      NEUTRAL: EnsoPhaseStats;
+    };
+  };
+};
+
 // GET /api/alerts?aoi=ID
 export type AlertAuthority = {
   code: string;
@@ -100,7 +144,7 @@ export type AlertAssessment = {
   trend_direction: 'ACCELERATING' | 'PERSISTENT' | 'STABLE' | 'RECEDING';
   unseasonal: boolean;
   oni_value: number | null;
-  enso_phase: 'EL_NINO' | 'LA_NINA' | 'NEUTRAL' | 'UNKNOWN';
+  enso_phase: EnsoPhase;
   nrt_detections: number | null;
   nrt_percent_of_normal: number | null;
   headline_es: string;

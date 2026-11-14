@@ -5,6 +5,7 @@ import { useCalendar } from '@/app/loaders';
 import { SectionHeading } from '@/components/ui';
 import { api } from '@/lib/api';
 import { CHART, SENSOR_COLOR, SEV_COLOR } from '@/lib/colors';
+import { fmtTempC } from '@/lib/format';
 import { useStore } from '@/store';
 
 const CARDS: { n: string; title: Key; eq: Key; body: Key }[] = [
@@ -198,10 +199,12 @@ export function Transparency() {
             <div className="rounded-lg border border-line/80 bg-graphite-900/60 p-3">
               <p className="text-xs text-ink-mute">{t('trans.live_oni')}</p>
               <p className="data mt-1 text-base font-semibold text-ink">
-                {alert ? `${alert.enso_phase}${alert.oni_value != null ? ` (${alert.oni_value >= 0 ? '+' : ''}${alert.oni_value.toFixed(2)} °C)` : ''}` : '—'}
+                {alert
+                  ? `${t(`enso.phase_${alert.enso_phase}` as Key)}${alert.oni_value != null ? ` (${fmtTempC(alert.oni_value, lang, 2)})` : ''}`
+                  : '—'}
               </p>
               <p className="data mt-0.5 text-xs text-ink-dim">
-                {alert ? `persist = ${alert.persistence_months}m · ${alert.trend_direction}` : '—'}
+                {alert ? `${alert.persistence_months}m · ${t(`anom.alert_trend_${alert.trend_direction}` as Key)}` : '—'}
               </p>
             </div>
           </div>
