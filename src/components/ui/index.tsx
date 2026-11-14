@@ -86,7 +86,7 @@ export function Segmented<T extends string>({
   size?: 'sm' | 'md';
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border border-line bg-graphite-900/70 p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex max-w-full flex-wrap rounded-lg border border-line bg-graphite-900/70 p-0.5">
       {options.map((o) => {
         const on = o.value === value;
         return (
