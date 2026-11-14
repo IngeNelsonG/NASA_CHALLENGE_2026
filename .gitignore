@@ -1,7 +1,25 @@
-node_modules
-dist
+# Dependencies and build outputs
+node_modules/
+dist/
 *.local
-.env
 .vite
 *.tsbuildinfo
 .DS_Store
+
+# Environment and secrets
+.env
+.env.*
+*.env
+!.env.example
+!backend/.env.example
+
+# Python virtual environment and caches
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/

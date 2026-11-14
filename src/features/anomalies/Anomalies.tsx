@@ -15,6 +15,7 @@ export function Anomalies() {
   const lang = useStore((s) => s.lang);
   const aoi = useStore((s) => s.aoi);
   const q = useQuery({ queryKey: ['anomalies', aoi.id], queryFn: ({ signal }) => api.anomalies(aoi.id, signal) });
+  const alertQ = useQuery({ queryKey: ['alerts', aoi.id], queryFn: ({ signal }) => api.alerts(aoi.id, signal) });
   const monthly = useCalendar('month');
 
   // Typical critical season from the monthly climatology: months above half of the peak month.
@@ -126,6 +127,124 @@ export function Anomalies() {
           <p className="mt-3 text-xs leading-relaxed text-ink-mute">{t('anom.list_note')}</p>
         </article>
       </div>
+
+      {/* Deterministic Early-Warning Alert Routing (CAP-1.2) */}
+      <article className="panel mt-6 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="eyebrow">{t('anom.alert_eyebrow')}</p>
+              {alertQ.data && (
+                <span className="chip text-[11px]">{alertQ.data.protocol}</span>
+              )}
+            </div>
+            <h3 className="mt-1 font-display text-lg font-medium text-ink">{t('anom.alert_title')}</h3>
+          </div>
+          {alertQ.isError ? (
+            <span className="text-xs text-ink-dim">{t('common.error')}</span>
+          ) : alertQ.isLoading ? (
+            <Spinner label={t('common.loading')} />
+          ) : alertQ.data ? (
+            <span
+              className={`rounded-full border px-3 py-1 font-mono text-xs font-medium tracking-wider ${
+                alertQ.data.severity === 'CRITICAL'
+                  ? 'border-rose-400/60 bg-rose-500/15 text-rose-200'
+                  : alertQ.data.severity === 'WARNING'
+                    ? 'border-amber-400/60 bg-amber-500/15 text-amber-200'
+                    : alertQ.data.severity === 'WATCH'
+                      ? 'border-yellow-400/50 bg-yellow-500/10 text-yellow-200'
+                      : 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+              }`}
+            >
+              {lang === 'es' ? alertQ.data.severity_label_es : alertQ.data.severity_label_en}
+            </span>
+          ) : null}
+        </div>
+
+        {alertQ.data && (
+          <div className="mt-4 space-y-5">
+            <div>
+              <p className="text-sm font-medium text-ink">
+                {lang === 'es' ? alertQ.data.headline_es : alertQ.data.headline_en}
+              </p>
+              <p className="mt-1.5 text-xs leading-relaxed text-ink-dim">
+                {lang === 'es' ? alertQ.data.technical_summary_es : alertQ.data.technical_summary_en}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2.5 text-xs">
+              <span className="chip data">
+                {alertQ.data.z_score >= 0 ? '+' : '−'}
+                {Math.abs(alertQ.data.z_score).toFixed(2)} σ
+              </span>
+              <span className="chip data">
+                {alertQ.data.anomaly_ratio.toFixed(2)}× {t('anom.alert_ratio')}
+              </span>
+              <span className="chip data">
+                {t('anom.alert_persist')}: {alertQ.data.persistence_months} {t('anom.alert_months')}
+              </span>
+              <span className="chip">
+                {t('anom.alert_trend')}: {t(`anom.alert_trend_${alertQ.data.trend_direction}`)}
+              </span>
+              {alertQ.data.unseasonal && (
+                <span className="chip border-amber-400/40 text-amber-200">{t('anom.alert_unseasonal')}</span>
+              )}
+              {alertQ.data.nrt_percent_of_normal != null && (
+                <span className="chip data">
+                  {t('anom.alert_nrt')}: {alertQ.data.nrt_percent_of_normal.toFixed(0)} %
+                </span>
+              )}
+            </div>
+
+            <div className="grid gap-5 border-t border-line pt-4 lg:grid-cols-12">
+              <div className="lg:col-span-7">
+                <p className="eyebrow">{t('anom.alert_authorities')}</p>
+                <ul className="mt-2.5 grid gap-2 sm:grid-cols-2">
+                  {alertQ.data.authorities.map((auth) => (
+                    <li
+                      key={auth.code}
+                      className="rounded-lg border border-line/80 bg-space-800/50 px-3 py-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-semibold text-ink">{auth.code}</span>
+                        {auth.portal && (
+                          <a
+                            href={auth.portal}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] text-amber-300 underline-offset-2 hover:underline"
+                          >
+                            {t('anom.alert_portal')} ↗
+                          </a>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-[11px] font-medium text-ink-dim">{auth.name}</p>
+                      <p className="mt-0.5 text-[11px] leading-snug text-ink-mute">
+                        {lang === 'es' ? auth.role_es : auth.role_en}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="lg:col-span-5">
+                <p className="eyebrow">{t('anom.alert_actions')}</p>
+                <ul className="mt-2.5 space-y-1.5 text-xs leading-relaxed text-ink-dim">
+                  {(lang === 'es'
+                    ? alertQ.data.recommended_actions_es
+                    : alertQ.data.recommended_actions_en
+                  ).map((step, idx) => (
+                    <li key={idx} className="flex gap-2">
+                      <span className="font-mono text-ink-mute">{idx + 1}.</span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+      </article>
     </section>
   );
 }

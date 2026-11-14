@@ -1,0 +1,63 @@
+{
+  "features": [
+    "a0",
+    "a1",
+    "a2",
+    "oni"
+  ],
+  "baseline_years": [
+    2001,
+    2025
+  ],
+  "backtest_years": [
+    2010,
+    2025
+  ],
+  "leads": {
+    "1": {
+      "weights": [
+        -0.779,
+        0.6288,
+        0.1791,
+        0.1266,
+        0.3417
+      ],
+      "n": 4739,
+      "base_rate": 0.345,
+      "brier_skill": 0.109,
+      "persistence_brier_skill": 0.088,
+      "auc": 0.699,
+      "hit_rate_at_half": 0.575
+    },
+    "2": {
+      "weights": [
+        -0.7553,
+        0.3191,
+        0.1478,
+        0.1665,
+        0.3422
+      ],
+      "n": 4739,
+      "base_rate": 0.345,
+      "brier_skill": 0.069,
+      "persistence_brier_skill": 0.044,
+      "auc": 0.66,
+      "hit_rate_at_half": 0.535
+    },
+    "3": {
+      "weights": [
+        -0.7397,
+        0.2141,
+        0.1315,
+        0.2497,
+        0.2804
+      ],
+      "n": 4739,
+      "base_rate": 0.345,
+      "brier_skill": 0.058,
+      "persistence_brier_skill": 0.033,
+      "auc": 0.652,
+      "hit_rate_at_half": 0.535
+    }
+  }
+}

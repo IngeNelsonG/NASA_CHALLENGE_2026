@@ -1,0 +1,59 @@
+[project]
+name = "brasa"
+version = "0.1.0"
+description = "Harmonized burning-activity calendar (MODIS + VIIRS) focused on Colombia."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.54.0,<1.0",
+    "pydantic>=2.9,<3.0",
+    "pydantic-settings>=2.6,<3.0",
+    "httpx>=0.27,<1.0",
+    "pandas>=3.1.0,<4.0",
+    "pyarrow>=23.0.1,<24",
+    "anthropic>=1,<2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pandas-stubs>=2.2",
+    "pip-audit>=2.7",
+    "shapely>=2.1,<3",
+]
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/brasa"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/F/W: pycodestyle + pyflakes, I: isort, B: bugbear, UP: pyupgrade,
+# S: bandit (security), N: naming, SIM: simplify, PL: pylint, RUF: ruff.
+select = ["E", "F", "W", "I", "B", "UP", "S", "N", "SIM", "PL", "RUF"]
+ignore = ["PLR0913"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLR2004"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+packages = ["brasa"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers -W error::DeprecationWarning:brasa --cov=brasa --cov-report=term-missing --cov-fail-under=80"

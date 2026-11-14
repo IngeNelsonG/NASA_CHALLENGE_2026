@@ -1,5 +1,5 @@
 import { API_URL, USE_MOCKS } from './env';
-import type { AOI, Anomaly, BBox, CalendarResponse, Hotspot, RawSensor, Resolution, TLE } from './types';
+import type { AOI, AlertAssessment, Anomaly, BBox, CalendarResponse, Hotspot, RawSensor, Resolution, TLE } from './types';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -33,6 +33,12 @@ export const api = {
     json<CalendarResponse>(`/api/calendar?${qs(p)}`, signal),
   hotspots: (p: { bbox: BBox; date: string; sensor: RawSensor }, signal?: AbortSignal) =>
     json<Hotspot[]>(`/api/hotspots?${qs({ bbox: p.bbox.join(','), date: p.date, sensor: p.sensor })}`, signal),
+  hotspotsRange: (p: { bbox: BBox; from: string; to: string; sensor?: RawSensor | 'all' }, signal?: AbortSignal) =>
+    json<Hotspot[]>(
+      `/api/hotspots?${qs({ bbox: p.bbox.join(','), from: p.from, to: p.to, sensor: p.sensor ?? 'all' })}`,
+      signal,
+    ),
   anomalies: (aoi: string, signal?: AbortSignal) => json<Anomaly[]>(`/api/anomalies?${qs({ aoi })}`, signal),
+  alerts: (aoi: string, signal?: AbortSignal) => json<AlertAssessment>(`/api/alerts?${qs({ aoi })}`, signal),
   tle: (signal?: AbortSignal) => json<TLE[]>('/api/satellites/tle', signal),
 };

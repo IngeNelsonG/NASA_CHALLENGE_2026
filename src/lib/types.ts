@@ -25,7 +25,7 @@ export type CalendarResponse = {
   resolution: string;
   cells: CalendarCell[];
   climatology: ClimatologyPoint[];
-  meta: { method: string; version: string };
+  meta: { method: string; version: string; ratio?: number; overlapMonths?: number; dataset?: string };
 };
 
 // GET /api/hotspots?bbox=W,S,E,N&date=YYYY-MM-DD&sensor=modis|viirs
@@ -46,7 +46,7 @@ export type Anomaly = { start: string; end: string; zScore: number; label: strin
 // GET /api/satellites/tle
 export type TLE = { name: string; norad: number; instrument: 'MODIS' | 'VIIRS'; line1: string; line2: string };
 
-// POST /api/analyst (backend proxy to Claude; SSE streaming response)
+// POST /api/analyst (deterministic statistical and radiometric analyst; SSE streaming response)
 export type AnalystRequest = {
   aoiId: string;
   question: string;
@@ -55,6 +55,52 @@ export type AnalystRequest = {
 };
 // The stream ends with a JSON payload: { highlights: [...] }
 export type AnalystHighlight = { date: string; reason: string };
+
+// GET /api/alerts?aoi=ID
+export type AlertAuthority = {
+  code: string;
+  name: string;
+  level: 'national' | 'departmental' | 'regional_environmental' | 'international';
+  role_es: string;
+  role_en: string;
+  portal: string | null;
+};
+
+export type AlertAssessment = {
+  id: string;
+  aoi_id: string;
+  region_name: string;
+  department: string | null;
+  country: string | null;
+  severity: 'CRITICAL' | 'WARNING' | 'WATCH' | 'NORMAL';
+  severity_rank: number;
+  severity_label_es: string;
+  severity_label_en: string;
+  reference_month: string;
+  latest_harmonized: number;
+  climatology_median: number;
+  climatology_q25: number;
+  climatology_q75: number;
+  climatology_p90: number;
+  anomaly_ratio: number;
+  z_score: number;
+  robust_z: number;
+  persistence_months: number;
+  trend_direction: 'ACCELERATING' | 'PERSISTENT' | 'STABLE' | 'RECEDING';
+  unseasonal: boolean;
+  oni_value: number | null;
+  enso_phase: 'EL_NINO' | 'LA_NINA' | 'NEUTRAL' | 'UNKNOWN';
+  nrt_detections: number | null;
+  nrt_percent_of_normal: number | null;
+  headline_es: string;
+  headline_en: string;
+  technical_summary_es: string;
+  technical_summary_en: string;
+  recommended_actions_es: string[];
+  recommended_actions_en: string[];
+  authorities: AlertAuthority[];
+  protocol: string;
+};
 
 // ---- Frontend-only derived shapes (not part of the API) ----
 

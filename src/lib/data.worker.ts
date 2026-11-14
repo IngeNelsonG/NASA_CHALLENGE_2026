@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 // Fetching, parsing and aggregation happen here so the main thread only receives render-ready buffers.
 import { api } from './api';
+import { USE_MOCKS } from './env';
 import { DAY_MS, DEG, dayIdx, isoDay, latLonToXYZ } from './geo';
 import type { BBox, CalendarData, Hotspot, HotspotBuffers, RawSensor, Resolution, Sensor } from './types';
 
@@ -79,16 +80,21 @@ function hexbin(points: Hotspot[], bbox: BBox, nM: number, nV: number) {
 }
 
 async function hotspots(p: { bbox: BBox; from: string; to: string; track?: boolean }): Promise<HotspotBuffers> {
-  const jobs: { date: string; sensor: RawSensor }[] = [];
-  const today = Math.floor(Date.now() / DAY_MS);
-  for (let d = dayIdx(p.from); d <= Math.min(today, dayIdx(p.to)); d++) {
-    jobs.push({ date: isoDay(d), sensor: 'modis' }, { date: isoDay(d), sensor: 'viirs' });
-  }
   const all: Hotspot[] = [];
-  await pool(jobs, 8, async (j) => {
-    const rows = await api.hotspots({ bbox: p.bbox, ...j });
+  if (!USE_MOCKS) {
+    const rows = await api.hotspotsRange({ bbox: p.bbox, from: p.from, to: p.to, sensor: 'all' });
     for (const r of rows) all.push(r);
-  });
+  } else {
+    const jobs: { date: string; sensor: RawSensor }[] = [];
+    const today = Math.floor(Date.now() / DAY_MS);
+    for (let d = dayIdx(p.from); d <= Math.min(today, dayIdx(p.to)); d++) {
+      jobs.push({ date: isoDay(d), sensor: 'modis' }, { date: isoDay(d), sensor: 'viirs' });
+    }
+    await pool(jobs, 8, async (j) => {
+      const rows = await api.hotspots({ bbox: p.bbox, ...j });
+      for (const r of rows) all.push(r);
+    });
+  }
   if (p.track) lastHotspots = all;
 
   const n = all.length;
