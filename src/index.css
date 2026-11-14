@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 4.5rem;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-space-950 font-sans text-ink antialiased;
+    background-image: radial-gradient(1200px 700px at 78% -10%, rgba(9, 96, 225, 0.16), transparent 60%),
+      radial-gradient(900px 600px at 0% 100%, rgba(7, 23, 63, 0.55), transparent 65%);
+    background-attachment: fixed;
+    overflow-x: hidden;
+  }
+  h1, h2, h3 {
+    @apply font-display;
+  }
+  :focus-visible {
+    outline: 2px solid #eafe07;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  ::selection {
+    background: rgba(46, 150, 245, 0.4);
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-xl border border-line bg-space-800/70 shadow-panel backdrop-blur-md;
+  }
+  .btn {
+    @apply inline-flex min-h-[40px] items-center justify-center gap-2 rounded-lg border border-line bg-space-700/70 px-3.5 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand-yonder/60 hover:bg-space-600/80 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply border-transparent bg-brand-neon text-white hover:border-transparent hover:bg-brand-yonder;
+  }
+  .btn-icon {
+    @apply min-h-[36px] min-w-[36px] px-2 py-1.5;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-space-700/60 px-2.5 py-1 text-xs text-ink-dim;
+  }
+  .eyebrow {
+    @apply font-mono text-xs uppercase tracking-[0.22em] text-brand-yonder;
+  }
+  .data {
+    @apply font-mono tabular-nums;
+  }
+  .section {
+    @apply relative mx-auto w-full max-w-[1280px] px-4 py-16 sm:px-6 lg:py-24 xl:pl-24;
+  }
+  .input {
+    @apply min-h-[40px] w-full rounded-lg border border-line bg-space-900/80 px-3 py-2 text-sm text-ink placeholder:text-ink-mute;
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.7s ease-out both;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* opacity only: a transform here would re-anchor the fixed header and panels */
+.fade-opacity {
+  animation: fade-opacity 0.8s ease-out both;
+}
+@keyframes fade-opacity {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,38 @@
+import { API_URL, USE_MOCKS } from './env';
+import type { AOI, Anomaly, BBox, CalendarResponse, Hotspot, RawSensor, Resolution, TLE } from './types';
+
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+/**
+ * Single network entry point. With VITE_USE_MOCKS=true the request is answered by
+ * src/mocks with a real `Response`, so everything downstream is identical in both modes.
+ * Safe to call from the main thread and from workers.
+ */
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  let res: Response;
+  if (USE_MOCKS) {
+    const { mockFetch } = await import('@/mocks/handlers');
+    res = await mockFetch(path, init);
+  } else {
+    res = await fetch(API_URL + path, init);
+  }
+  if (!res.ok) throw new ApiError(res.status, `${init?.method ?? 'GET'} ${path} → ${res.status}`);
+  return res;
+}
+
+const qs = (o: Record<string, string>) => new URLSearchParams(o).toString();
+const json = async <T>(path: string, signal?: AbortSignal) => (await apiFetch(path, { signal })).json() as Promise<T>;
+
+export const api = {
+  searchAoi: (q: string, signal?: AbortSignal) => json<AOI[]>(`/api/aoi/search?${qs({ q })}`, signal),
+  calendar: (p: { aoi: string; from: string; to: string; resolution: Resolution }, signal?: AbortSignal) =>
+    json<CalendarResponse>(`/api/calendar?${qs(p)}`, signal),
+  hotspots: (p: { bbox: BBox; date: string; sensor: RawSensor }, signal?: AbortSignal) =>
+    json<Hotspot[]>(`/api/hotspots?${qs({ bbox: p.bbox.join(','), date: p.date, sensor: p.sensor })}`, signal),
+  anomalies: (aoi: string, signal?: AbortSignal) => json<Anomaly[]>(`/api/anomalies?${qs({ aoi })}`, signal),
+  tle: (signal?: AbortSignal) => json<TLE[]>('/api/satellites/tle', signal),
+};
