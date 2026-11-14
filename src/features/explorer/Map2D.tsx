@@ -2,7 +2,7 @@ import { geoCircle, geoEqualEarth, geoGraticule10, geoPath } from 'd3-geo';
 import { useEffect, useRef } from 'react';
 import { feature, mesh } from 'topojson-client';
 import type { GeometryCollection } from 'topojson-specification';
-import { fireRGB, SENSOR_COLOR } from '@/lib/colors';
+import { fireRGB, HOTSPOT_COLOR, SENSOR_COLOR } from '@/lib/colors';
 import { bboxCenter, bboxId, bboxSpan, clamp, DEG, subsolar } from '@/lib/geo';
 import { satScenePos, sceneToGeodetic } from '@/lib/satellites';
 import { simClock } from '@/lib/simClock';
@@ -134,12 +134,11 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
       }
       if (hotspots) {
         const size = clamp(1.2 + tf.k * 0.12, 1.5, 6);
-        for (const pass of [0, 1] as const) {
-          ctx.fillStyle = pass === 0 ? SENSOR_COLOR.modis : SENSOR_COLOR.viirs;
+        {
+          ctx.fillStyle = HOTSPOT_COLOR;
           ctx.globalAlpha = 0.85;
-          const s = pass === 0 ? size : size * 0.6;
+          const s = size * 0.8;
           for (let i = 0; i < hotspots.count; i++) {
-            if (hotspots.sensor[i] !== pass) continue;
             const p = proj([hotspots.lonlat[i * 2], hotspots.lonlat[i * 2 + 1]]);
             if (!p || p[0] < -4 || p[1] < -4 || p[0] > W + 4 || p[1] > H + 4) continue;
             ctx.fillRect(p[0] - s / 2, p[1] - s / 2, s, s);

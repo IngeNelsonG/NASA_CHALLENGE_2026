@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { fmtDay, fmtInt, fmtMonth, useT } from '@/app/i18n';
-import { Segmented, SensorDot, Spinner } from '@/components/ui';
+import { Segmented, Spinner } from '@/components/ui';
+import { HOTSPOT_COLOR } from '@/lib/colors';
 import { dayIdx, daysInYear, isoDay, todayIso, yearStartIdx } from '@/lib/geo';
 import { useStore, type Granularity } from '@/store';
 import { useData } from '@/store/data';
@@ -109,8 +110,7 @@ export function Timeline() {
           {loading && <Spinner label={t('time.loading')} />}
           {hot && (
             <span className="data flex items-center gap-2">
-              <SensorDot sensor="modis" /> {fmtInt(hot.nModis, lang)}
-              <SensorDot sensor="viirs" /> {fmtInt(hot.nViirs, lang)}
+              <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: HOTSPOT_COLOR }} /> {fmtInt(hot.count, lang)} {t('time.hotspots')}
             </span>
           )}
         </span>

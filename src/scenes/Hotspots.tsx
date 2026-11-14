@@ -1,15 +1,15 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { BufferAttribute, BufferGeometry, CircleGeometry, Color, type InstancedMesh, Matrix4, ShaderMaterial, Sphere, SRGBColorSpace, Vector3 } from 'three';
-import { fireRGB, SENSOR_COLOR } from '@/lib/colors';
+import { fireRGB, HOTSPOT_COLOR } from '@/lib/colors';
 import { DEG, latLonToXYZ } from '@/lib/geo';
 import { useStore } from '@/store';
 import { useData } from '@/store/data';
 import { view } from './view';
 
 const VERT = /* glsl */ `
-  attribute float aSensor; attribute float aFrp;
-  uniform float uSize; uniform vec3 uColM; uniform vec3 uColV;
+  attribute float aFrp;
+  uniform float uSize; uniform vec3 uCol;
   varying vec3 vCol; varying float vVis;
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
@@ -18,8 +18,8 @@ const VERT = /* glsl */ `
     // horizon test instead of depth: points on the far side fade out at the limb
     vVis = smoothstep(0.02, 0.10, dot(n, normalize(cameraPosition - position)));
     // MODIS pixels (1 km) are drawn larger than VIIRS pixels (375 m)
-    gl_PointSize = uSize * mix(1.0, 0.6, aSensor) * (0.85 + 0.3 * clamp(log(aFrp + 1.0) / 5.0, 0.0, 1.0));
-    vCol = mix(uColM, uColV, aSensor);
+    gl_PointSize = uSize * 0.8 * (0.85 + 0.3 * clamp(log(aFrp + 1.0) / 5.0, 0.0, 1.0));
+    vCol = uCol;
     if (vVis < 0.01) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
   }`;
 const FRAG = /* glsl */ `
@@ -33,7 +33,7 @@ const FRAG = /* glsl */ `
     #include <colorspace_fragment>
   }`;
 
-/** All fire detections (MODIS and VIIRS, always together) in a single Points draw call. */
+/** All fire detections in one colour and one draw call: MODIS and VIIRS are shown as a single unified record. */
 export function Hotspots() {
   const data = useData((s) => s.hotspots);
   const { gl, invalidate } = useThree();
@@ -48,8 +48,7 @@ export function Hotspots() {
         depthWrite: false,
         uniforms: {
           uSize: { value: 6 },
-          uColM: { value: new Color(SENSOR_COLOR.modis) },
-          uColV: { value: new Color(SENSOR_COLOR.viirs) },
+          uCol: { value: new Color(HOTSPOT_COLOR) },
         },
       }),
     [],
@@ -59,7 +58,6 @@ export function Hotspots() {
     const g = new BufferGeometry();
     if (data) {
       g.setAttribute('position', new BufferAttribute(data.xyz, 3));
-      g.setAttribute('aSensor', new BufferAttribute(data.sensor, 1));
       g.setAttribute('aFrp', new BufferAttribute(data.frp, 1));
     }
     g.boundingSphere = new Sphere(new Vector3(), 1.1);

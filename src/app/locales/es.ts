@@ -76,9 +76,8 @@ export const es: Record<keyof typeof en, string> = {
   'layers.borders': 'Fronteras',
 
   'legend.title': 'Leyenda',
-  'legend.both': 'Las detecciones de ambos sensores se muestran siempre juntas.',
-  'legend.modis': 'MODIS · 1 km (Terra, Aqua)',
-  'legend.viirs': 'VIIRS · 375 m (S-NPP, NOAA-20/21)',
+  'legend.hotspot': 'Detección de fuego activo',
+  'legend.both': 'Las detecciones MODIS y VIIRS se unifican en un solo registro y se muestran igual.',
   'legend.aoi': 'Área de interés',
   'legend.density': 'Densidad relativa, sensores equilibrados',
   'legend.low': 'baja',
@@ -94,6 +93,7 @@ export const es: Record<keyof typeof en, string> = {
   'sat.position': 'Ahora sobre',
 
   'time.title': 'Línea de tiempo',
+  'time.hotspots': 'detecciones',
   'time.play': 'Reproducir',
   'time.pause': 'Pausar',
   'time.prev': 'Paso anterior',

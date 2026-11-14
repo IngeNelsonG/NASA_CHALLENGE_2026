@@ -74,9 +74,8 @@ export const en = {
   'layers.borders': 'Borders',
 
   'legend.title': 'Legend',
-  'legend.both': 'Detections from both sensors are always shown together.',
-  'legend.modis': 'MODIS · 1 km (Terra, Aqua)',
-  'legend.viirs': 'VIIRS · 375 m (S-NPP, NOAA-20/21)',
+  'legend.hotspot': 'Active-fire detection',
+  'legend.both': 'MODIS and VIIRS detections are merged into one record and shown the same way.',
   'legend.aoi': 'Area of interest',
   'legend.density': 'Relative density, sensors balanced',
   'legend.low': 'low',
@@ -92,6 +91,7 @@ export const en = {
   'sat.position': 'Now over',
 
   'time.title': 'Timeline',
+  'time.hotspots': 'detections',
   'time.play': 'Play',
   'time.pause': 'Pause',
   'time.prev': 'Previous step',

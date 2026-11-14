@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { fmtInt, useT } from '@/app/i18n';
 import { SensorDot } from '@/components/ui';
-import { SENSOR_COLOR } from '@/lib/colors';
+import { HOTSPOT_COLOR, SENSOR_COLOR } from '@/lib/colors';
 import { bboxId, DEG, fmtLat, fmtLon } from '@/lib/geo';
 import { satScenePos, sceneToGeodetic } from '@/lib/satellites';
 import { simClock } from '@/lib/simClock';
@@ -62,14 +62,14 @@ export function PickPanel() {
   const near = useMemo(() => {
     if (!picked || !hot) return null;
     const dLat = RADIUS_KM / 111.2, cl = Math.cos(picked.lat * DEG) || 1;
-    let m = 0, v = 0;
+    let n = 0;
     for (let i = 0; i < hot.count; i++) {
       const dy = hot.lonlat[i * 2 + 1] - picked.lat;
       if (Math.abs(dy) > dLat) continue;
       const dx = (hot.lonlat[i * 2] - picked.lon) * cl;
-      if (dx * dx + dy * dy <= dLat * dLat) hot.sensor[i] === 0 ? m++ : v++;
+      if (dx * dx + dy * dy <= dLat * dLat) n++;
     }
-    return { m, v };
+    return n;
   }, [picked, hot]);
 
   if (!picked) return null;
@@ -97,15 +97,12 @@ export function PickPanel() {
           <span aria-hidden>✕</span>
         </button>
       </div>
-      {near && (
+      {near !== null && (
         <div className="mt-3 text-sm text-ink-dim">
           <p>{t('pick.nearby', { km: RADIUS_KM })}</p>
           <p className="data mt-1 flex items-center gap-4 text-base text-ink">
             <span className="flex items-center gap-1.5">
-              <SensorDot sensor="modis" /> MODIS {fmtInt(near.m, lang)}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <SensorDot sensor="viirs" /> VIIRS {fmtInt(near.v, lang)}
+              <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: HOTSPOT_COLOR }} /> {fmtInt(near, lang)} {t('time.hotspots')}
             </span>
           </p>
         </div>

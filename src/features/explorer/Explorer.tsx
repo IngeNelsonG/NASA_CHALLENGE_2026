@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { useT } from '@/app/i18n';
 import { Segmented, Toggle } from '@/components/ui';
 import { AoiSearch } from '@/features/aoi/AoiSearch';
-import { fireGradientCss } from '@/lib/colors';
+import { fireGradientCss, HOTSPOT_COLOR } from '@/lib/colors';
 import { useGlobeStage } from '@/scenes/useGlobeStage';
 import { view } from '@/scenes/view';
 import { useStore, type LayerId, type TimeScale } from '@/store';
@@ -93,13 +93,10 @@ export function Explorer() {
           </div>
           <div className="mt-3 border-t border-line pt-3 text-xs text-ink-dim">
             <p className="mb-1.5 font-semibold text-ink">{t('legend.title')}</p>
-            <p className="mb-2 leading-snug">{t('legend.both')}</p>
             <p className="flex items-center gap-2">
-              <span aria-hidden className="inline-block h-3 w-3 rounded-full bg-modis" /> {t('legend.modis')}
+              <span aria-hidden className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: HOTSPOT_COLOR }} /> {t('legend.hotspot')}
             </p>
-            <p className="mt-1 flex items-center gap-2">
-              <span aria-hidden className="ml-[2px] mr-[2px] inline-block h-2 w-2 rounded-full bg-viirs" /> {t('legend.viirs')}
-            </p>
+            <p className="mb-1 mt-1 leading-snug text-ink-mute">{t('legend.both')}</p>
             <p className="mt-1 flex items-center gap-2">
               <span aria-hidden className="inline-block h-0.5 w-3 bg-brand-yellow" /> {t('legend.aoi')}
             </p>

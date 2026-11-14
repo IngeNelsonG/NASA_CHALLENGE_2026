@@ -7,6 +7,9 @@ export const SENSOR_COLOR: Record<Sensor, string> = {
   harmonized: '#E3B62F',
 };
 
+/** Every fire detection, whatever the sensor: the record is presented as one unified dataset. */
+export const HOTSPOT_COLOR = '#FF5A36';
+
 /** Observed zero (distinct from "no observation", which is hatched). */
 export const ZERO_COLOR = '#161B2B';
 export const NODATA_BG = '#0C111E';
