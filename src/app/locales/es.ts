@@ -24,6 +24,7 @@ export const es: Record<keyof typeof en, string> = {
   'nav.anomalies': 'Anomalías',
   'nav.method': 'Método',
   'nav.analyst': 'Analista',
+  'nav.team': 'Equipo',
   'nav.data': 'Datos',
 
   'hero.eyebrow': 'NASA Space Apps Challenge 2026 · MODIS + VIIRS',
@@ -33,6 +34,21 @@ export const es: Record<keyof typeof en, string> = {
   'hero.explore': 'Explorar el globo',
   'hero.calendar_cta': 'Abrir el calendario',
   'hero.stat_platforms': 'Satélites',
+  'hero.cta': 'Explorar',
+  'hero.discover': 'Descubrir',
+  'header.menu_open': 'Abrir menú',
+  'header.menu_close': 'Cerrar menú',
+
+  'statement.eyebrow': 'Por qué importa',
+  'statement.a': 'El fuego se observa desde la órbita hace más de dos décadas',
+  'statement.b': 'pero con instrumentos que lo cuentan distinto. Los leemos como un solo registro, para que una temporada pueda compararse con cualquier otra.',
+
+  'team.eyebrow': 'El equipo',
+  'team.lead': 'Cuatro estudiantes de la Universidad Santo Tomás, participantes del evento local de Bogotá del NASA Space Apps Challenge 2026.',
+  'team.owner': 'Líder del equipo',
+  'team.event': 'Evento local: Bogotá, Colombia',
+  'team.challenge': 'Reto: Harmonization of MODIS and VIIRS Hot Spots.',
+  'team.link': 'Página del equipo en Space Apps',
 
   'problem.eyebrow': 'El problema',
   'problem.title': 'Dos instrumentos, dos conteos distintos',

@@ -117,7 +117,7 @@ export function Timeline() {
       </div>
       <input
         type="range"
-        className="mt-2 w-full accent-[#2E96F5]"
+        className="mt-2 w-full accent-[#F2703A]"
         min={mdl.min}
         max={mdl.max}
         step={1}

@@ -2,19 +2,19 @@ import { useEffect, type RefObject } from 'react';
 import { bboxId, clamp, wrapLon } from '@/lib/geo';
 import type { BBox } from '@/lib/types';
 import { useStore } from '@/store';
-import { view } from './view';
+import { view, type StageLayout } from './view';
 
 /**
  * Turns a DOM element into a "stage" for the single WebGL globe: the globe centres itself on the
  * element and (when interactive) the element receives the pointer/keyboard controls.
  */
-export function useGlobeStage(ref: RefObject<HTMLElement>, id: string, opts: { interactive?: boolean; alpha?: number } = {}) {
-  const { interactive = true, alpha = 1 } = opts;
+export function useGlobeStage(ref: RefObject<HTMLElement>, id: string, opts: { interactive?: boolean; alpha?: number; layout?: StageLayout } = {}) {
+  const { interactive = true, alpha = 1, layout } = opts;
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const stage = { id, el, ratio: 0, alpha };
+    const stage = { id, el, ratio: 0, alpha, layout };
     view.stages.set(id, stage);
     const io = new IntersectionObserver(
       ([e]) => {
@@ -32,7 +32,7 @@ export function useGlobeStage(ref: RefObject<HTMLElement>, id: string, opts: { i
       view.stages.delete(id);
       view.kick();
     };
-  }, [ref, id, alpha]);
+  }, [ref, id, alpha, layout]);
 
   useEffect(() => {
     const el = ref.current;

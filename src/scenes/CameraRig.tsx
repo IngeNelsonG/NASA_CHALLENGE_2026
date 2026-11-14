@@ -67,9 +67,11 @@ export function CameraRig() {
         view.rectDirty = false;
       }
       const r = st.rect;
-      st.tx = r.left + r.width / 2;
-      st.ty = r.top + r.height / 2;
-      st.tf = 0.43 * Math.min(r.width, r.height);
+      // default: centred and fitted; a stage may place the globe itself (e.g. the hero horizon)
+      const custom = stage.layout?.(r);
+      st.tx = custom ? custom.cx : r.left + r.width / 2;
+      st.ty = custom ? custom.cy : r.top + r.height / 2;
+      st.tf = custom ? custom.r : 0.43 * Math.min(r.width, r.height);
       ta = stage.alpha * smooth(0.04, 0.4, stage.ratio);
       sid = stage.id;
     } else if (phase === 'intro') {

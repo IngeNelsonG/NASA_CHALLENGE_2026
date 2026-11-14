@@ -6,7 +6,9 @@ import type { BBox } from '@/lib/types';
 export const ZOOM_MIN = 0.7;
 export const ZOOM_MAX = 6;
 
-type Stage = { id: string; el: HTMLElement; ratio: number; alpha: number };
+/** Where the globe sits for a stage: centre (viewport px) and radius at zoom 1. */
+export type StageLayout = (rect: DOMRect) => { cx: number; cy: number; r: number };
+type Stage = { id: string; el: HTMLElement; ratio: number; alpha: number; layout?: StageLayout };
 
 export const view = {
   // camera sub-point and zoom (1 = globe fits its stage)

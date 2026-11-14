@@ -3,12 +3,11 @@ import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useT } from '@/app/i18n';
-import { SENSOR_COLOR } from '@/lib/colors';
 import { useStore } from '@/store';
 
 gsap.registerPlugin(ScrollTrigger, MotionPathPlugin);
 
-export const SECTIONS = ['hero', 'problem', 'explore', 'calendar', 'anomalies', 'method', 'analyst', 'data'] as const;
+export const SECTIONS = ['hero', 'problem', 'explore', 'calendar', 'anomalies', 'method', 'analyst', 'team', 'data'] as const;
 const W = 76, H = 520;
 
 function SatIcon({ color }: { color: string }) {
@@ -22,8 +21,9 @@ function SatIcon({ color }: { color: string }) {
 }
 
 /**
- * Scroll companion in the page margin: two SVG satellites (MODIS / VIIRS colours) ride an orbital
- * arc tied to scroll progress and the dots mark the active section. No WebGL involved.
+ * Scroll companion in the page margin: two SVG satellites ride an orbital arc tied to scroll
+ * progress and the dots mark the active section. Drawn in white with mix-blend-difference so it
+ * stays legible over both the cream sections and the dark windows. No WebGL involved.
  */
 export function OrbitNav() {
   const t = useT();
@@ -89,15 +89,15 @@ export function OrbitNav() {
   }, []);
 
   return (
-    <nav aria-label={t('nav.sections')} className="fixed left-2 top-1/2 z-30 hidden -translate-y-1/2 xl:block [@media(max-height:640px)]:!hidden" style={{ width: W, height: H }}>
+    <nav aria-label={t('nav.sections')} className="fixed left-2 top-1/2 z-30 hidden -translate-y-1/2 mix-blend-difference xl:block [@media(max-height:640px)]:!hidden" style={{ width: W, height: H }}>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden className="absolute inset-0 overflow-visible">
-        <path ref={pathA} d={`M 14 10 Q 82 ${H / 2} 14 ${H - 10}`} fill="none" stroke="rgba(148,170,220,0.35)" strokeWidth={1} />
-        <path ref={pathB} d={`M 26 2 Q 104 ${H / 2} 26 ${H - 2}`} fill="none" stroke="rgba(148,170,220,0.16)" strokeWidth={1} strokeDasharray="2 5" />
+        <path ref={pathA} d={`M 14 10 Q 82 ${H / 2} 14 ${H - 10}`} fill="none" stroke="rgba(235,235,235,0.5)" strokeWidth={1} />
+        <path ref={pathB} d={`M 26 2 Q 104 ${H / 2} 26 ${H - 2}`} fill="none" stroke="rgba(235,235,235,0.25)" strokeWidth={1} strokeDasharray="2 5" />
         <g ref={satB}>
-          <SatIcon color={SENSOR_COLOR.viirs} />
+          <SatIcon color="#cfcfcf" />
         </g>
         <g ref={satA}>
-          <SatIcon color={SENSOR_COLOR.modis} />
+          <SatIcon color="#ffffff" />
         </g>
       </svg>
       <ol>
@@ -111,12 +111,12 @@ export function OrbitNav() {
                 aria-current={on ? 'true' : undefined}
                 className="absolute -left-3 -top-3 grid h-6 w-6 place-items-center rounded-full"
               >
-                <span className={`block rounded-full transition-all ${on ? 'h-2.5 w-2.5 bg-brand-yellow shadow-[0_0_10px_rgba(234,254,7,0.7)]' : 'h-1.5 w-1.5 bg-ink-mute group-hover:bg-ink'}`} />
+                <span className={`block rounded-full transition-all ${on ? 'h-2.5 w-2.5 bg-white' : 'h-1.5 w-1.5 bg-white/50 group-hover:bg-white'}`} />
                 <span className="sr-only">{t(`nav.${id}`)}</span>
               </a>
               <span
                 aria-hidden
-                className="data pointer-events-none absolute left-5 top-0 z-10 -translate-y-1/2 whitespace-nowrap rounded border border-line bg-space-900 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-ink opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+                className="data pointer-events-none absolute left-5 top-0 z-10 -translate-y-1/2 whitespace-nowrap px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-white opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
               >
                 {t(`nav.${id}`)}
               </span>

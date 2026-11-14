@@ -22,6 +22,7 @@ export const en = {
   'nav.anomalies': 'Anomalies',
   'nav.method': 'Method',
   'nav.analyst': 'Analyst',
+  'nav.team': 'Team',
   'nav.data': 'Data',
 
   'hero.eyebrow': 'NASA Space Apps Challenge 2026 · MODIS + VIIRS',
@@ -31,6 +32,21 @@ export const en = {
   'hero.explore': 'Explore the globe',
   'hero.calendar_cta': 'Open the calendar',
   'hero.stat_platforms': 'Satellites',
+  'hero.cta': 'Explore',
+  'hero.discover': 'Discover',
+  'header.menu_open': 'Open menu',
+  'header.menu_close': 'Close menu',
+
+  'statement.eyebrow': 'Why it matters',
+  'statement.a': 'Fire has been watched from orbit for more than two decades',
+  'statement.b': 'but by instruments that count it differently. We read them as one record, so a season can be compared with any other.',
+
+  'team.eyebrow': 'The team',
+  'team.lead': 'Four students from Universidad Santo Tomás, taking part in the Bogotá local event of the NASA Space Apps Challenge 2026.',
+  'team.owner': 'Team owner',
+  'team.event': 'Local event: Bogotá, Colombia',
+  'team.challenge': 'Challenge: Harmonization of MODIS and VIIRS Hot Spots.',
+  'team.link': 'Team page on Space Apps',
 
   'problem.eyebrow': 'The problem',
   'problem.title': 'Two instruments, two different counts',

@@ -11,13 +11,15 @@ import { Header } from './Header';
 import { Hero } from './Hero';
 import { OrbitNav } from './OrbitNav';
 import { Problem } from './Problem';
+import { Statement } from './Statement';
+import { Team } from './Team';
 
 const CalendarSection = lazy(() => import('@/features/calendar/CalendarSection'));
 
 export default function Landing() {
   const t = useT();
   return (
-    <div className="fade-opacity relative z-10">
+    <div className="fade-opacity relative z-10 overflow-x-clip">
       <a href="#main" className="btn btn-primary fixed left-3 top-3 z-50 -translate-y-20 focus:translate-y-0">
         {t('nav.skip')}
       </a>
@@ -25,6 +27,7 @@ export default function Landing() {
       <OrbitNav />
       <main id="main">
         <Hero />
+        <Statement />
         <Problem />
         <Explorer />
         <Suspense
@@ -39,6 +42,7 @@ export default function Landing() {
         <Anomalies />
         <Methodology />
         <Analyst />
+        <Team />
         <Credits />
       </main>
       <SatCard />

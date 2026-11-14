@@ -102,18 +102,18 @@ export default function IntroSequence() {
       <div ref={ring} aria-hidden className="pointer-events-none invisible absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-brand-yonder/70 shadow-[0_0_40px_rgba(46,150,245,0.35)]" />
       <div ref={logo} className="invisible relative flex flex-col items-center px-6 text-center">
         {logoMissing ? (
-          // Text stand-in until the official SVG is placed in /public/brand (we never redraw the logo).
+          // Text stand-in if the logo file is missing (we never redraw the logo).
           <p className="font-display text-2xl font-semibold tracking-wide text-ink sm:text-3xl">
             NASA Space Apps Challenge
             <span className="mt-1 block font-mono text-sm font-normal tracking-[0.3em] text-ink-dim">2026</span>
           </p>
         ) : (
           <img
-            src={`${import.meta.env.BASE_URL}brand/space-apps-logo.svg`}
+            src={`${import.meta.env.BASE_URL}brand/space-apps-logo.png`}
             alt="NASA Space Apps Challenge"
-            width={280}
-            height={280}
-            className="h-auto w-[min(60vw,280px)]"
+            width={440}
+            height={172}
+            className="h-auto w-[min(70vw,340px)]"
             onError={() => setLogoMissing(true)}
           />
         )}

@@ -64,7 +64,7 @@ export function Credits() {
           {USE_MOCKS && <p className="mt-3 text-xs text-ink-mute">{t('data.mock_note')}</p>}
         </article>
       </div>
-      <footer className="mt-10 border-t border-line pt-6 text-xs leading-relaxed text-ink-mute">
+      <footer className="mt-14 border-t border-line pt-6 text-center text-xs leading-relaxed text-ink-mute">
         <p>
           {APP_NAME} · NASA Space Apps Challenge 2026 · “Harmonization of MODIS and VIIRS Hot Spots”. {t('data.footer')}
         </p>

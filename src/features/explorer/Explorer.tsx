@@ -25,7 +25,8 @@ export function Explorer() {
   useGlobeStage(stage, 'explore', { interactive: viewMode === '3d' });
 
   return (
-    <section id="explore" aria-labelledby="explore-title" className="relative scroll-mt-0 lg:h-[100svh] lg:min-h-[760px]">
+    <section id="explore" aria-labelledby="explore-title" className="frame -scroll-mt-[5.5rem] lg:h-[100svh] lg:min-h-[760px]">
+     <div className="window lg:h-full">
       <div
         ref={stage}
         tabIndex={viewMode === '3d' ? 0 : -1}
@@ -40,11 +41,11 @@ export function Explorer() {
         {t('globe.help')}
       </p>
 
-      <div className="pointer-events-none relative z-10 flex flex-col gap-3 px-4 pb-10 sm:px-6 lg:absolute lg:inset-0 lg:grid lg:grid-cols-[20rem_1fr_17rem] lg:grid-rows-[1fr_auto] lg:pb-6 lg:pt-20 xl:pl-24">
+      <div className="pointer-events-none relative z-10 flex flex-col gap-3 px-4 pb-10 sm:px-6 lg:absolute lg:inset-0 lg:grid lg:grid-cols-[20rem_1fr_17rem] lg:grid-rows-[1fr_auto] lg:pb-6 lg:pt-24 xl:pl-24">
         {/* AOI */}
         <div className="panel pointer-events-auto self-start p-4 lg:col-start-1 lg:row-start-1">
           <p className="eyebrow">{t('nav.explore')}</p>
-          <h2 id="explore-title" className="mt-1 text-xl font-extrabold">
+          <h2 id="explore-title" className="mt-1 text-2xl">
             {t('aoi.title')}
           </h2>
           <div className="mt-3">
@@ -140,6 +141,7 @@ export function Explorer() {
           <Timeline />
         </div>
       </div>
+     </div>
     </section>
   );
 }

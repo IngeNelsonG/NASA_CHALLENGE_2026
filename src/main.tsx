@@ -1,5 +1,4 @@
-import '@fontsource/fira-sans/latin-600.css';
-import '@fontsource/fira-sans/latin-800.css';
+import '@fontsource-variable/fraunces/opsz.css';
 import '@fontsource/overpass/latin-400.css';
 import '@fontsource/overpass/latin-600.css';
 import '@fontsource/overpass-mono/latin-400.css';
