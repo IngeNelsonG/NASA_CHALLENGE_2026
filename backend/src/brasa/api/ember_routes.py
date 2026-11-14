@@ -1281,6 +1281,11 @@ def _rows_for_entry(
     return rows, ratio, entry.country == "Colombia"
 
 
+def _recent_stamp(ctx: _EmberContext) -> str | None:
+    latest = ctx.recent_src.get() if ctx.recent_src is not None else None
+    return latest.fetched_at.isoformat() if latest is not None else None
+
+
 def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> None:
     @app.get("/api/aoi/search")
     def api_aoi_search(q: str = Query(default="", max_length=120)) -> list[dict[str, Any]]:
@@ -1306,7 +1311,7 @@ def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, buil
         to_date: str = Query(default=date.today().isoformat(), alias="to", max_length=10),
         resolution: Resolution = "day",
     ) -> dict[str, Any]:
-        return dict(build_cal(aoi, from_date, to_date, resolution))
+        return dict(build_cal(aoi, from_date, to_date, resolution, _recent_stamp(ctx)))
 
     @app.get("/api/hotspots")
     def api_hotspots(
@@ -1481,18 +1486,27 @@ def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> 
         _ = recent_stamp
         return _build_alerts_overview(ctx, as_of=as_of_key)
 
+    @lru_cache(maxsize=128)
+    def _cached_alert(
+        entry_id: str, as_of_key: date | None, recent_stamp: str | None
+    ) -> AlertItem:
+        _ = recent_stamp
+        entry = _resolve_aoi_id(entry_id, ctx.aoi_by_id)
+        if entry is None:  # pragma: no cover - validated before cache lookup
+            raise HTTPException(status_code=404, detail=f"Unknown AOI: {entry_id}")
+        latest = ctx.recent_src.get() if ctx.recent_src is not None else None
+        return _evaluate_entry_alert(ctx, entry, as_of=as_of_key, latest_recent=latest)
+
     @app.get("/api/anomalies")
     def api_anomalies(aoi: str = Query(max_length=120)) -> list[dict[str, Any]]:
-        cal = build_cal(aoi, "2000-01-01", date.today().isoformat(), "month")
+        cal = build_cal(aoi, "2000-01-01", date.today().isoformat(), "month", _recent_stamp(ctx))
         return _detect_anomalies_from_cells(cal["cells"])
 
     @app.get("/api/alerts/overview", response_model=AlertsOverviewResponse)
     def api_alerts_overview(
         as_of: Annotated[date | None, Query()] = None,
     ) -> AlertsOverviewResponse:
-        latest = ctx.recent_src.get() if ctx.recent_src is not None else None
-        stamp = latest.fetched_at.isoformat() if latest is not None else None
-        return _cached_overview(as_of, stamp)
+        return _cached_overview(as_of, _recent_stamp(ctx))
 
     @app.get("/api/alerts", response_model=AlertItem)
     def api_alerts(
@@ -1502,8 +1516,7 @@ def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> 
         entry = _resolve_aoi_id(aoi, ctx.aoi_by_id)
         if entry is None:
             raise HTTPException(status_code=404, detail=f"Unknown AOI: {aoi}")
-        latest = ctx.recent_src.get() if ctx.recent_src is not None else None
-        return _evaluate_entry_alert(ctx, entry, as_of=as_of, latest_recent=latest)
+        return _cached_alert(entry.id, as_of, _recent_stamp(ctx))
 
     @app.get("/api/satellites/tle")
     def api_satellites_tle() -> list[dict[str, Any]]:
@@ -1514,7 +1527,9 @@ def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> 
         entry = _resolve_aoi_id(req.aoi_id, ctx.aoi_by_id)
         if entry is None:
             raise HTTPException(status_code=404, detail=f"Unknown AOI: {req.aoi_id}")
-        cal = build_cal(entry.id, "2000-01-01", date.today().isoformat(), "month")
+        cal = build_cal(
+            entry.id, "2000-01-01", date.today().isoformat(), "month", _recent_stamp(ctx)
+        )
         rows, ratio, in_col = _rows_for_entry(ctx, entry)
         alert = evaluate_rows(
             rows,
@@ -1588,8 +1603,13 @@ def register_ember_routes(
 
     @lru_cache(maxsize=64)
     def _build_calendar_payload(
-        aoi_id: str, from_str: str, to_str: str, resolution: Resolution
+        aoi_id: str,
+        from_str: str,
+        to_str: str,
+        resolution: Resolution,
+        recent_stamp: str | None = None,
     ) -> dict[str, Any]:
+        _ = recent_stamp
         entry = _resolve_aoi_id(aoi_id, ctx.aoi_by_id)
         if entry is None:
             raise HTTPException(status_code=404, detail=f"Unknown AOI: {aoi_id}")

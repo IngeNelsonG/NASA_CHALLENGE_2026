@@ -506,7 +506,7 @@ def _base_app(settings: Settings) -> FastAPI:
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
     )
-    app.add_middleware(GZipMiddleware, minimum_size=GZIP_MINIMUM_BYTES)
+    app.add_middleware(GZipMiddleware, minimum_size=GZIP_MINIMUM_BYTES, compresslevel=6)
 
     @app.middleware("http")
     async def add_security_headers(

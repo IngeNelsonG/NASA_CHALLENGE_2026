@@ -3,8 +3,19 @@ import type { GeometryCollection } from 'topojson-specification';
 import type { BBox } from './types';
 import { loadWorld } from './world';
 
+const BANDS = 256;
+
+type BandIndex = {
+  /** Flat [xi, yi, xj, yj, ...] for all non-horizontal edges. */
+  edges: Float64Array;
+  /** CSR offsets per latitude band (length BANDS + 1). */
+  bandOffsets: Uint32Array;
+  /** Edge offsets (index * 4 into `edges`) grouped by band. */
+  bandEdges: Uint32Array;
+};
+
 /** Rings of a (Multi)Polygon as flat [lon, lat, lon, lat, …] arrays, outer and holes alike. */
-export type Shape = { rings: Float64Array[]; bbox: BBox };
+export type Shape = { rings: Float64Array[]; bbox: BBox; index?: BandIndex };
 
 const norm = (s: string) =>
   s
@@ -59,6 +70,45 @@ export async function countryGeometry(name: string): Promise<GeoJSON.Geometry | 
   return idx.get(ALIASES[n] ?? n) ?? idx.get(n) ?? null;
 }
 
+function buildBandIndex(rings: Float64Array[], bbox: BBox): BandIndex {
+  const s = bbox[1], n = bbox[3], span = n - s;
+  const raw: number[] = [];
+  for (const r of rings) {
+    for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+      const yi = r[i + 1], yj = r[j + 1];
+      if (yi === yj) continue;
+      raw.push(r[i], yi, r[j], yj);
+    }
+  }
+  const edges = Float64Array.from(raw);
+  const bandOffsets = new Uint32Array(BANDS + 1);
+  if (span <= 0 || edges.length === 0) {
+    return { edges, bandOffsets, bandEdges: new Uint32Array(0) };
+  }
+  const edgeCount = edges.length >> 2;
+  const b0s = new Uint16Array(edgeCount);
+  const b1s = new Uint16Array(edgeCount);
+  for (let e = 0; e < edgeCount; e++) {
+    const o = e << 2;
+    const yi = edges[o + 1], yj = edges[o + 3];
+    const yMin = yi < yj ? yi : yj;
+    const yMax = yi < yj ? yj : yi;
+    const b0 = Math.min(BANDS - 1, Math.max(0, Math.floor(((yMin - s) / span) * BANDS)));
+    const b1 = Math.min(BANDS - 1, Math.max(0, Math.floor(((yMax - s) / span) * BANDS)));
+    b0s[e] = b0;
+    b1s[e] = b1;
+    for (let b = b0; b <= b1; b++) bandOffsets[b + 1]++;
+  }
+  for (let b = 1; b <= BANDS; b++) bandOffsets[b] += bandOffsets[b - 1];
+  const cursor = bandOffsets.slice();
+  const bandEdges = new Uint32Array(bandOffsets[BANDS]);
+  for (let e = 0; e < edgeCount; e++) {
+    const o = e << 2;
+    for (let b = b0s[e]; b <= b1s[e]; b++) bandEdges[cursor[b]++] = o;
+  }
+  return { edges, bandOffsets, bandEdges };
+}
+
 export function toShape(geometry: GeoJSON.Geometry | null | undefined): Shape | null {
   if (!geometry) return null;
   const polys =
@@ -79,19 +129,25 @@ export function toShape(geometry: GeoJSON.Geometry | null | undefined): Shape | 
       if (ring.length >= 3) rings.push(flat);
     }
   }
-  return rings.length ? { rings, bbox: [w, s, e, n] } : null;
+  if (!rings.length) return null;
+  const bbox: BBox = [w, s, e, n];
+  return { rings, bbox, index: buildBandIndex(rings, bbox) };
 }
 
-/** Even-odd point-in-polygon over every ring, so holes and islands both work. */
+/** Even-odd point-in-polygon over every ring, using the y-banded edge index. */
 export function inShape(shape: Shape, lon: number, lat: number): boolean {
   const [w, s, e, n] = shape.bbox;
   if (lon < w || lon > e || lat < s || lat > n) return false;
+  const span = n - s;
+  if (span <= 0) return false;
+  const idx = (shape.index ??= buildBandIndex(shape.rings, shape.bbox));
+  const b = Math.min(BANDS - 1, Math.max(0, Math.floor(((lat - s) / span) * BANDS)));
+  const { edges, bandOffsets, bandEdges } = idx;
   let inside = false;
-  for (const r of shape.rings) {
-    for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
-      const xi = r[i], yi = r[i + 1], xj = r[j], yj = r[j + 1];
-      if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
-    }
+  for (let k = bandOffsets[b], end = bandOffsets[b + 1]; k < end; k++) {
+    const o = bandEdges[k];
+    const xi = edges[o], yi = edges[o + 1], xj = edges[o + 2], yj = edges[o + 3];
+    if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
 }
@@ -111,5 +167,6 @@ export function shapeFromRings(rings: number[][]): Shape | null {
       s = Math.min(s, r[i + 1]);
       n = Math.max(n, r[i + 1]);
     }
-  return { rings: out, bbox: [w, s, e, n] };
+  const bbox: BBox = [w, s, e, n];
+  return { rings: out, bbox, index: buildBandIndex(out, bbox) };
 }

@@ -3,7 +3,6 @@ import { useEffect, useRef } from 'react';
 import { api } from '@/lib/api';
 import { RECORD_START } from '@/lib/env';
 import { todayIso } from '@/lib/geo';
-import { buildSats } from '@/lib/satellites';
 import { countryGeometry, ringsOf, toShape } from '@/lib/shape';
 import { simClock } from '@/lib/simClock';
 import type { Resolution } from '@/lib/types';
@@ -38,10 +37,16 @@ export function DataLoaders() {
     view.kick();
   }, [timeScale]);
 
-  const tle = useQuery({ queryKey: ['tle'], queryFn: ({ signal }) => api.tle(signal) });
+  const tle = useQuery({
+    queryKey: ['tle'],
+    queryFn: async ({ signal }) => {
+      const [tles, { buildSats }] = await Promise.all([api.tle(signal), import('@/lib/satellites')]);
+      return buildSats(tles);
+    },
+  });
   useEffect(() => {
     if (tle.data) {
-      useData.setState({ sats: buildSats(tle.data) });
+      useData.setState({ sats: tle.data });
       view.kick();
     }
   }, [tle.data]);

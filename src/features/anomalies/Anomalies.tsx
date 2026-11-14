@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { fmtInt, fmtMonth, monthName, useT } from '@/app/i18n';
 import { useCalendar } from '@/app/loaders';
 import { SectionHeading, Segmented, Spinner } from '@/components/ui';
@@ -94,17 +94,40 @@ export function Anomalies() {
   const [filterText, setFilterText] = useState('');
   const [activeOnly, setActiveOnly] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<'idle' | 'loading' | 'denied'>('idle');
+  const sectionRef = useRef<HTMLElement>(null);
+  const [nearViewport, setNearViewport] = useState(false);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setNearViewport(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setNearViewport(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: '600px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   const q = useQuery({ queryKey: ['anomalies', aoi.id], queryFn: ({ signal }) => api.anomalies(aoi.id, signal) });
   const alertQ = useQuery({ queryKey: ['alerts', aoi.id], queryFn: ({ signal }) => api.alerts(aoi.id, signal) });
   const visitorQ = useQuery({
     queryKey: ['alerts', visitorAoiId],
     queryFn: ({ signal }) => api.alerts(visitorAoiId, signal),
+    enabled: nearViewport,
   });
   const overviewQ = useQuery({
     queryKey: ['alerts-overview'],
     queryFn: ({ signal }) => api.alertsOverview(signal),
     staleTime: 5 * 60_000,
+    enabled: nearViewport,
   });
   const monthly = useCalendar('month');
 
@@ -173,7 +196,7 @@ export function Anomalies() {
   };
 
   return (
-    <section id="anomalies" className="section" aria-labelledby="anomalies-title">
+    <section id="anomalies" ref={sectionRef} className="section" aria-labelledby="anomalies-title">
       <SectionHeading id="anomalies-title" eyebrow={t('anom.eyebrow')} title={t('anom.title')} lead={t('anom.lead')} />
       <div className="grid gap-5 lg:grid-cols-[1fr_1.25fr]">
         <article className="panel p-5 sm:p-6">

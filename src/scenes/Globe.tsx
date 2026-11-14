@@ -61,11 +61,16 @@ export function Earth() {
     [],
   );
 
-  // Progressive textures: 512 px first (≈12 KB for both), then 2K on mobile / 4K on desktop.
+  // Progressive textures: 512 px first (≈12 KB for both), then 2K night and 2K/4K day depending on viewport pixels.
   useEffect(() => {
     let alive = true;
     const loader = new TextureLoader();
-    const big = !isMobile() && gl.capabilities.maxTextureSize >= 4096 ? 4096 : 2048;
+    const dayRes =
+      !isMobile() &&
+      gl.capabilities.maxTextureSize >= 4096 &&
+      gl.getPixelRatio() * Math.max(window.innerWidth, window.innerHeight) > 2000
+        ? 4096
+        : 2048;
     const load = (name: 'day' | 'night', res: number) =>
       loader.loadAsync(`${import.meta.env.BASE_URL}textures/earth-${name}-${res}.webp`).then((t) => {
         t.colorSpace = SRGBColorSpace;
@@ -83,7 +88,7 @@ export function Earth() {
         apply('uDay', d);
         apply('uNight', n);
         useStore.getState().set({ sceneReady: true });
-        return Promise.all([load('day', big).then((t) => apply('uDay', t)), load('night', big).then((t) => apply('uNight', t))]);
+        return Promise.all([load('day', dayRes).then((t) => apply('uDay', t)), load('night', 2048).then((t) => apply('uNight', t))]);
       })
       .catch(() => useStore.getState().set({ sceneReady: true }));
     return () => {

@@ -16,8 +16,8 @@ export default function GlobeCanvas() {
     <Canvas
       flat
       frameloop="demand"
-      dpr={isMobile() ? [1, 1.5] : [1, 2]}
-      gl={{ antialias: true, alpha: true, powerPreference: 'high-performance', stencil: false }}
+      dpr={isMobile() ? [1, 1.5] : [1, 1.75]}
+      gl={{ antialias: typeof window === 'undefined' || window.devicePixelRatio < 2, alpha: true, powerPreference: 'high-performance', stencil: false }}
       camera={{ fov: 30, near: 0.1, far: 20, position: [0, 0, 6] }}
       style={{ pointerEvents: 'none' }}
       onCreated={({ gl }) => {
