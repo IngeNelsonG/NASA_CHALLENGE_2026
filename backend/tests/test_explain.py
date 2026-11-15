@@ -257,6 +257,17 @@ def test_openai_compatible_summary_failures_are_none(response: httpx.Response) -
     assert openai_compatible_summary(http, "https://x.test/v1", "m", _facts(), "en") is None
 
 
+def test_openai_compatible_summary_retries_once_after_a_short_rate_limit() -> None:
+    replies = iter(
+        [
+            httpx.Response(429, headers={"retry-after": "0"}),
+            httpx.Response(200, json=_completion("Listo.")),
+        ]
+    )
+    http = _openai_http(lambda _request: next(replies))
+    assert openai_compatible_summary(http, "https://x.test", "m", _facts(), "es") == ("Listo.", "m")
+
+
 def test_openai_compatible_summary_network_error_is_none() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("down", request=request)

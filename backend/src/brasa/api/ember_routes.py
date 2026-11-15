@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from brasa.alerts.detector import ENSO_THRESHOLD, _enso_phase, _fmt_es, evaluate_rows
 from brasa.alerts.schemas import AlertItem
+from brasa.api.assistant import Assistant, read_reply, system_prompt
 from brasa.api.hotspot_sources import (
     FIRMS_MAX_SPAN_DAYS,
     ORINOQUIA,
@@ -167,11 +168,18 @@ class AnalystContext(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
 class AnalystRequest(BaseModel):
     aoi_id: str = Field(alias="aoiId", max_length=120)
     question: str = Field(min_length=1, max_length=2000)
     lang: Literal["es", "en"] = "es"
     context: AnalystContext | None = None
+    # earlier turns of the chat, oldest first, so follow-up questions make sense
+    history: list[ChatTurn] = Field(default_factory=list, max_length=8)
 
     model_config = {"populate_by_name": True}
 
@@ -1814,7 +1822,9 @@ def _compute_enso_payload(
     }
 
 
-def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> None:
+def _register_intel_routes(
+    app: FastAPI, ctx: _EmberContext, build_cal: Any, assistant: Assistant | None = None
+) -> None:
     @lru_cache(maxsize=4)
     def _cached_overview(
         as_of_key: date | None, recent_stamp: str | None
@@ -1896,6 +1906,14 @@ def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> 
             question=req.question,
             lang=req.lang,
         )
+        if assistant is not None:
+            messages = [turn.model_dump() for turn in req.history]
+            messages.append({"role": "user", "content": req.question})
+            raw = assistant(system_prompt(entry.name, text, req.lang), messages)
+            reply, months = read_reply(raw or "", req.lang)
+            if reply:  # otherwise keep the deterministic reply
+                text = reply
+                highlights = highlights if months else []
 
         def _stream() -> Iterator[str]:
             words = text.split(" ")
@@ -1921,6 +1939,7 @@ def register_ember_routes(
     data_dir: Path,
     firms: FirmsHotspots | None = None,
     warm_up: bool = False,
+    assistant: Assistant | None = None,
 ) -> None:
     """Register unified /api/* endpoints backed by real NASA FIRMS archives."""
     aoi_by_id, aoi_ordered = _build_aoi_index(department_collection, world_collection, countries)
@@ -2020,7 +2039,7 @@ def register_ember_routes(
     _register_calendar_and_hotspot_routes(app, ctx, _build_calendar_payload)
 
     _register_area_routes(app, ctx)
-    _register_intel_routes(app, ctx, _build_calendar_payload)
+    _register_intel_routes(app, ctx, _build_calendar_payload, assistant)
 
     if warm_up:
         # Pre-build the calendars the landing page asks for first, so the first visitor

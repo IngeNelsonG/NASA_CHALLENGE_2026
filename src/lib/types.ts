@@ -63,6 +63,8 @@ export type AnalystRequest = {
   question: string;
   lang: 'es' | 'en';
   context?: { from: string; to: string; sensor: Sensor };
+  /** earlier turns of the help chat, oldest first */
+  history?: { role: 'user' | 'assistant'; content: string }[];
 };
 // The stream ends with a JSON payload: { highlights: [...] }
 export type AnalystHighlight = { date: string; reason: string };

@@ -27,11 +27,13 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from brasa import __version__
 from brasa.alerts.detector import evaluate_rows, summarize_alerts
 from brasa.alerts.schemas import AlertItem, AlertSeverity, AlertsResponse
+from brasa.api.assistant import ASSISTANT_MAX_TOKENS, Assistant
 from brasa.api.ember_routes import _slug as aoi_slug
 from brasa.api.ember_routes import register_ember_routes
 from brasa.api.explain import (
     Summarizer,
     build_facts,
+    chat_completion,
     make_claude_summarizer,
     make_openai_compatible_summarizer,
     template_summary,
@@ -107,6 +109,9 @@ _heavy = threading.BoundedSemaphore(HEAVY_CONCURRENCY)
 # AI summaries cost money per call. Whatever the clients do, at most this many are generated per
 # hour (cached answers are free); beyond it /explain serves the deterministic template.
 AI_CALLS_PER_HOUR = 120
+# The help chat answers free text, so nothing is cached; the same kind of hourly cap applies.
+ASSISTANT_CALLS_PER_HOUR = 300
+ASSISTANT_TIMEOUT_SECONDS = 20.0
 HOUR_SECONDS = 3600.0
 
 
@@ -428,12 +433,8 @@ def _world_maps(
     }
 
 
-def _with_cache(
-    summarizer: Summarizer | None, clock: Callable[[], float] = time.monotonic
-) -> CachedSummarizer:
-    """Cache only successful AI answers (a transient API error must not pin the template) and
-    cap how many are generated per hour, so no pattern of requests can run up the AI bill."""
-    cache: dict[Hashable, tuple[str, str]] = {}
+def _hourly_budget(limit: int, clock: Callable[[], float] = time.monotonic) -> Callable[[], bool]:
+    """True while fewer than `limit` calls were allowed in the last hour (and counts this one)."""
     calls: deque[float] = deque()
     lock = threading.Lock()
 
@@ -442,10 +443,48 @@ def _with_cache(
             now = clock()
             while calls and now - calls[0] >= HOUR_SECONDS:
                 calls.popleft()
-            if len(calls) >= AI_CALLS_PER_HOUR:
+            if len(calls) >= limit:
                 return False
             calls.append(now)
             return True
+
+    return within_budget
+
+
+def _pick_assistant(settings: Settings) -> Assistant | None:
+    """Help chat on the OpenAI-compatible provider (Groq) when configured, within a budget."""
+    base_url, model, key = settings.llm_base_url, settings.llm_model, settings.llm_api_key
+    if not (base_url and model and key and key.get_secret_value()):
+        return None
+    http = httpx.Client(
+        timeout=ASSISTANT_TIMEOUT_SECONDS,
+        headers={"Authorization": f"Bearer {key.get_secret_value()}"},
+    )
+    within_budget = _hourly_budget(ASSISTANT_CALLS_PER_HOUR)
+
+    def assistant(system: str, messages: list[dict[str, str]]) -> str | None:
+        if not within_budget():
+            logger.warning("Assistant: hourly budget reached, serving the deterministic reply.")
+            return None
+        return chat_completion(
+            http,
+            base_url,
+            model,
+            [{"role": "system", "content": system}, *messages],
+            max_tokens=ASSISTANT_MAX_TOKENS,
+            temperature=0.2,
+        )
+
+    return assistant
+
+
+def _with_cache(
+    summarizer: Summarizer | None, clock: Callable[[], float] = time.monotonic
+) -> CachedSummarizer:
+    """Cache only successful AI answers (a transient API error must not pin the template) and
+    cap how many are generated per hour, so no pattern of requests can run up the AI bill."""
+    cache: dict[Hashable, tuple[str, str]] = {}
+    within_budget = _hourly_budget(AI_CALLS_PER_HOUR, clock)
 
     def summarize(key: Hashable, facts: ExplainFacts, lang: Lang) -> tuple[str, str] | None:
         if key in cache or summarizer is None:
@@ -677,6 +716,7 @@ def create_app(
     summarizer: Summarizer | None = None,
     countries: CountryCalendars | None = None,
     recent: RecentSource | None = None,
+    assistant: Assistant | None = None,
 ) -> FastAPI:
     """Dependencies default to the data in `settings.data_dir`; tests inject their own.
 
@@ -850,6 +890,9 @@ def create_app(
         data_dir=data_dir,
         firms=_firms_hotspots(settings),
         warm_up=settings.environment != "test",
+        # the test environment never calls the AI provider unless a test injects one
+        assistant=assistant
+        or (_pick_assistant(settings) if settings.environment != "test" else None),
     )
 
     return app

@@ -340,3 +340,20 @@ input[type='range'] {
     min-width: 48px;
   }
 }
+
+/* help assistant: grows out of its button, bottom-right */
+.assistant-in {
+  transform-origin: bottom right;
+  animation: assistant-in 0.22s var(--ease-out) both;
+}
+@keyframes assistant-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-in {
+    animation: none;
+  }
+}
