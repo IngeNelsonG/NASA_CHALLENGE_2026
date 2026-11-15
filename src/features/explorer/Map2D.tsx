@@ -108,7 +108,7 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
       }
       const now = simClock.now();
       if (layers.terminator) {
-        const sun = subsolar(now);
+        const sun = subsolar(Date.now());
         ctx.beginPath();
         path(night.center([sun.lon + 180, -sun.lat])());
         ctx.fillStyle = 'rgba(2,4,12,0.5)';

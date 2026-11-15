@@ -11,12 +11,16 @@ import re
 import time
 from collections.abc import Callable, Sequence
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import anthropic
 import httpx
 
 from brasa.api.schemas import ExplainFacts, Lang
+
+if TYPE_CHECKING:
+    # The SDK takes ~3 s to import; it is only loaded when a Claude key is configured, so the API
+    # (and each serverless cold start) does not pay for it otherwise.
+    import anthropic
 
 logger = logging.getLogger(__name__)
 
@@ -282,9 +286,11 @@ def _user_message(facts: ExplainFacts, lang: Lang) -> str:
 
 
 def claude_summary(
-    client: anthropic.Anthropic, model: str, facts: ExplainFacts, lang: Lang
+    client: "anthropic.Anthropic", model: str, facts: ExplainFacts, lang: Lang
 ) -> tuple[str, str] | None:
     """Ask Claude to phrase `facts`; None on refusal, empty output or any API error."""
+    import anthropic  # noqa: PLC0415 - deferred, see the TYPE_CHECKING import
+
     try:
         response = client.beta.messages.create(
             model=model,
@@ -374,6 +380,8 @@ def openai_compatible_summary(
 
 
 def make_claude_summarizer(api_key: str, model: str) -> Summarizer:
+    import anthropic  # noqa: PLC0415 - deferred, see the TYPE_CHECKING import
+
     client = anthropic.Anthropic(api_key=api_key, timeout=TIMEOUT_SECONDS, max_retries=1)
     return lambda facts, lang: claude_summary(client, model, facts, lang)
 

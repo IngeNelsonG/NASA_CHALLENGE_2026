@@ -2,7 +2,6 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
 import { BackSide, AdditiveBlending, ShaderMaterial, SRGBColorSpace, Texture, TextureLoader, Vector3 } from 'three';
 import { latLonToXYZ, subsolar } from '@/lib/geo';
-import { simClock } from '@/lib/simClock';
 import { useStore } from '@/store';
 
 const sun = new Vector3(1, 0, 0);
@@ -92,7 +91,7 @@ export function Earth() {
   }, [gl, invalidate, material]);
 
   useFrame(() => {
-    const p = subsolar(simClock.now());
+    const p = subsolar(Date.now()); // real sun: only the satellites run on the sped-up clock
     const [x, y, z] = latLonToXYZ(p.lat, p.lon);
     sun.set(x, y, z);
     const target = useStore.getState().layers.terminator ? 1 : 0;

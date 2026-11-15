@@ -60,9 +60,11 @@ logger = logging.getLogger(__name__)
 Resolution = Literal["day", "week", "month"]
 MODIS_START = date(2000, 11, 1)
 VIIRS_FIRST_LIGHT = date(2012, 1, 20)
-HOTSPOT_POINT_CAP = 25_000
-# Calendars built at startup: the landing page's default area and Colombia (client RECORD_START).
-WARM_AOIS = ("co-orinoquia", "co")
+# ~165 bytes of JSON per point: 20 000 points stay near 3.3 MB, under the 4.5 MB response limit
+# of serverless hosts (Vercel Functions), and are more than the globe needs to show density.
+HOTSPOT_POINT_CAP = 20_000
+# Calendars built at startup: the landing page's default area (no selection) and Colombia.
+WARM_AOIS = ("world", "co")
 RECORD_START = "2000-01-01"
 MIN_RING_POINTS = 3
 MIN_STAT_SAMPLES = 2

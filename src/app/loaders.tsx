@@ -5,7 +5,7 @@ import { RECORD_START } from '@/lib/env';
 import { todayIso } from '@/lib/geo';
 import { countryGeometry, ringsOf, toShape } from '@/lib/shape';
 import { simClock } from '@/lib/simClock';
-import type { Resolution } from '@/lib/types';
+import type { Resolution, TLE } from '@/lib/types';
 import { callWorker } from '@/lib/worker-client';
 import { view } from '@/scenes/view';
 import { isWorld, timelineRange, useStore } from '@/store';
@@ -45,9 +45,13 @@ export function DataLoaders() {
   const tle = useQuery({
     queryKey: ['tle'],
     queryFn: async ({ signal }) => {
-      const [tles, { buildSats }] = await Promise.all([api.tle(signal), import('@/lib/satellites')]);
+      // the satellites are decoration as much as data: if the API is unreachable, orbit with the
+      // TLE snapshot shipped in the bundle instead of leaving the sky empty
+      const tles = await api.tle(signal).catch(async () => (await import('@/mocks/tle.json')).default as TLE[]);
+      const { buildSats } = await import('@/lib/satellites');
       return buildSats(tles);
     },
+    retry: false,
   });
   useEffect(() => {
     if (tle.data) {

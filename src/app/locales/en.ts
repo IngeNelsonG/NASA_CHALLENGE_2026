@@ -104,7 +104,7 @@ export const en = {
   'trans.formulas': 'Formulas',
   'trans.rule': 'Decision rule',
   'method.to_formulas': 'See every formula in the Transparency section',
-  'api.waking': 'Waking up the data server… the first visit can take up to a minute.',
+  'api.waking': 'Connecting to the data server… the first load after a quiet spell can take a few seconds.',
   'api.down': 'The data server is not responding right now.',
 
   'globe.aria': 'Interactive globe. Drag to rotate, arrow keys to move, plus and minus to zoom, Esc to clear the selection.',

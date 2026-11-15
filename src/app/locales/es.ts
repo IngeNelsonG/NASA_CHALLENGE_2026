@@ -106,7 +106,7 @@ export const es: Record<keyof typeof en, string> = {
   'trans.formulas': 'Fórmulas',
   'trans.rule': 'Regla de decisión',
   'method.to_formulas': 'Ver todas las fórmulas en la sección de Transparencia',
-  'api.waking': 'Despertando el servidor de datos… la primera visita puede tardar hasta un minuto.',
+  'api.waking': 'Conectando con el servidor de datos… la primera carga tras un rato sin uso puede tardar unos segundos.',
   'api.down': 'El servidor de datos no responde en este momento.',
 
   'globe.aria': 'Globo interactivo. Arrastra para rotar, flechas para mover, más y menos para acercar, Esc para anular la selección.',

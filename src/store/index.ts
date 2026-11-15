@@ -102,7 +102,8 @@ export const useStore = create<State>((set, get) => ({
   date: todayIso(),
   granularity: 'month',
   playing: false,
-  timeScale: 60,
+  // simulated clock: at 600× a satellite circles the Earth in ~10 s (and the terminator creeps)
+  timeScale: 600,
   calRange: { from: RECORD_START, to: todayIso() },
   resolution: 'month',
   tool: 'pan',

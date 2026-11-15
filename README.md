@@ -77,19 +77,28 @@ BRASA_FIRMS_MAP_KEY=your-key
 
 Points outside Colombia are then fetched live from the FIRMS Area API (standard archive for older days, near-real-time for the last ~3 months), cached in memory, for spans up to 62 days (timeline set to *Day* or *Month*). FIRMS allows 5000 requests per 10 minutes per key; one month is ~14 requests.
 
-## Deployment (Vercel + Render)
+## Deployment (everything on Vercel)
 
-The frontend is a static Vite build on **Vercel**; the API is the `backend/Dockerfile` image on **Render** (free plan). The browser calls the API directly, so the API must allow the site's origin (CORS).
+One Vercel project serves both halves under the same domain:
 
-1. **API on Render.** Render → *New* → *Blueprint* → this repository. `render.yaml` creates the `ember-api` web service (Docker, `/health` check, `PORT=8000`, CORS for `https://nasachallenge2026.vercel.app` and its preview URLs). Fill in the secrets it asks for: `BRASA_FIRMS_MAP_KEY` (points outside Colombia) and, optionally, `BRASA_LLM_BASE_URL` / `BRASA_LLM_API_KEY` / `BRASA_LLM_MODEL` (AI wording in the help assistant). When it is live, copy its URL, e.g. `https://ember-api-xxxx.onrender.com`, and check `<url>/health`.
-2. **Frontend on Vercel.** Project → *Settings* → *Environment Variables* (Production and Preview):
-   - `VITE_USE_MOCKS` = `false`
-   - `VITE_API_URL` = the Render URL, without a trailing slash
+- the Vite site (`npm run build` → `dist`);
+- the FastAPI backend as a Python Vercel Function, `api/index.py`, which mounts `backend/src/brasa` with the data in `backend/data`. `vercel.json` sends every `/api/...` request to it and bundles those folders; its dependencies are in the root `requirements.txt` (~320 MB unzipped with the data, under Vercel's 500 MB limit for Python).
 
-   Vite writes these into the bundle at build time, so **redeploy** after changing them.
-3. If the site uses another domain, add it to `BRASA_CORS_ALLOWED_ORIGINS` on Render (a JSON list).
+Same origin, so no CORS and no `VITE_API_URL`. In Vercel → *Settings* → *Environment Variables*:
 
-Free Render services sleep after 15 minutes without traffic; the first visit then waits up to a minute and the page shows a "waking up the data server" note meanwhile. Open the site a few minutes before presenting.
+| Variable | Needed for |
+|---|---|
+| `BRASA_FIRMS_MAP_KEY` | fire points outside Colombia (live NASA FIRMS) |
+| `BRASA_LLM_BASE_URL`, `BRASA_LLM_API_KEY`, `BRASA_LLM_MODEL` | optional AI wording in the help assistant |
+
+Do **not** set `VITE_API_URL` or `VITE_USE_MOCKS` (the defaults are right). Server-side variables never reach the browser: only `VITE_*` ones are written into the bundle.
+
+Notes:
+
+- **Cold start.** A new function instance loads the archive in ~10 s; while it does, the page shows a "connecting to the data server" note. Vercel keeps instances warm while there is traffic.
+- **Responses are capped at 20 000 points** (≈3.3 MB) to stay under Vercel's 4.5 MB response limit.
+- **Background refreshes** (near-real-time FIRMS feed, calendar warm-up) are best effort on serverless: they run while an instance is alive.
+- **Hosting the API elsewhere** (any Docker host, using `backend/Dockerfile`) still works: set `VITE_API_URL` to its origin and `BRASA_CORS_ALLOWED_ORIGINS` / `BRASA_CORS_ALLOWED_ORIGIN_REGEX` on the API.
 
 ## What the mock data is
 
@@ -116,7 +125,7 @@ src/
 
 - **One WebGL renderer.** Any DOM element can become a "stage" (`useGlobeStage`), so the intro, the hero and the explorer share the same Earth. On desktop the canvas is fixed behind the page and a projection view-offset keeps the globe on the active stage. On touch and narrow screens the canvas is *docked*: moved over the active stage in page coordinates so it scrolls natively (a fixed canvas re-aimed on every scroll frame lags behind the finger), with ambient motion capped at 30 fps.
 - **Earth-fixed frame.** The Earth never rotates; the camera orbits it. Satellites (satellite.js, SGP4 → ECEF) and the sun direction (day/night terminator) are computed in that frame from a simulated UTC clock (×1 / ×60 / ×600).
-- **Rendering on demand.** `frameloop="demand"`; `CameraRig` requests frames only while something moves, plus a 4 fps heartbeat for satellites. Nothing renders when the tab is hidden or no stage is on screen.
+- **Rendering on demand.** `frameloop="demand"`; `CameraRig` requests frames only while something moves (satellites orbit on a ×600 simulated clock; the day/night terminator follows the real sun), plus a 4 fps heartbeat. Nothing renders when the tab is hidden or no stage is on screen.
 - **Hotspots** are one `Points` draw call with a shader; density hexagons are one `InstancedMesh`.
 - **Worker.** Fetching, parsing, typed-array packing, hex binning and CSV export run in `src/lib/data.worker.ts`.
 - **2D fallback.** Without WebGL2, or on low-memory devices, the app uses the Equal Earth canvas map (`Map2D`).

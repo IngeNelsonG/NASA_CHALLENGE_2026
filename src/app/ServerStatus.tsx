@@ -8,9 +8,9 @@ import { useT } from './i18n';
 const SLOW_MS = 3500;
 
 /**
- * Free hosting plans put the API to sleep when idle; the first request then takes up to a minute.
- * This pings a light endpoint on load and, only if it is slow or fails, shows a small note so the
- * page does not just look empty.
+ * The API runs as a serverless function: after a quiet spell the first request starts it (a few
+ * seconds). This pings a light endpoint on load and, only if it is slow or fails, shows a small
+ * note so the page does not just look empty.
  */
 export function ServerStatus() {
   const t = useT();
