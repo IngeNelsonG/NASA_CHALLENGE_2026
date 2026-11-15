@@ -1,5 +1,9 @@
 # Ember — harmonized MODIS + VIIRS fire activity
 
+[![CI/CD](https://github.com/IngeNelsonG/NASA_CHALLENGE_2026/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/IngeNelsonG/NASA_CHALLENGE_2026/actions/workflows/ci-cd.yml)
+
+**Live: <https://nasaspace.site>** (also <https://nasachallenge2026.vercel.app>)
+
 Frontend for the NASA Space Apps Challenge 2026 challenge **"Harmonization of MODIS and VIIRS Hot Spots"** (authored by CONAE).
 It turns two fire records that cannot be compared directly — MODIS (1 km, 2000→) and VIIRS (375 m, 2012→) — into one burn-activity calendar for an area of interest.
 
@@ -78,6 +82,15 @@ BRASA_FIRMS_MAP_KEY=your-key
 Points outside Colombia are then fetched live from the FIRMS Area API (standard archive for older days, near-real-time for the last ~3 months), cached in memory, for spans up to 62 days (timeline set to *Day* or *Month*). FIRMS allows 5000 requests per 10 minutes per key; one month is ~14 requests.
 
 ## Deployment (everything on Vercel)
+
+Live at **<https://nasaspace.site>** (`www.nasaspace.site` redirects there; DNS on Cloudflare in *DNS only* mode, not proxied).
+
+**CI/CD** — [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml):
+
+- Every pull request and every push runs the checks: frontend typecheck + build (`npm run build`) and backend `ruff check`, `mypy src` and `pytest` (coverage ≥ 80 %).
+- A push to `main` deploys to production **only after the checks pass** (`vercel deploy --prod` from the workflow). Vercel's own Git deploys are off for `main` (`git.deploymentEnabled` in `vercel.json`); other branches still get Vercel preview URLs.
+- The deploy needs the repository secret `VERCEL_TOKEN` (Vercel → Account Settings → Tokens). The project and team IDs are in the workflow; they are not secret.
+- To redeploy without a new commit: Actions → CI/CD → *Run workflow* on `main`.
 
 One Vercel project serves both halves under the same domain:
 

@@ -1,0 +1,64 @@
+# CI on every pull request and push; production deploy to Vercel only when main passes CI.
+# Vercel itself no longer deploys main (vercel.json → git.deploymentEnabled), so nothing
+# reaches https://nasaspace.site without green checks. Other branches still get Vercel previews.
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # cancel superseded PR runs, but never a production deploy half-way
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+  backend:
+    name: Backend (ruff + mypy + pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run mypy src
+      - run: uv run pytest -q
+
+  deploy:
+    name: Deploy to Vercel (production)
+    needs: [frontend, backend]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://nasaspace.site
+    env:
+      VERCEL_ORG_ID: team_R5uBHzLOr7ldMIm5uBAkV2wX
+      VERCEL_PROJECT_ID: prj_LjrE5Qvryhnt7Hq6y57pOebgFCZd
+    steps:
+      - uses: actions/checkout@v4
+      # Vercel builds remotely with the project's own environment variables
+      - run: npx --yes vercel@65.16.0 deploy --prod --yes --token "${{ secrets.VERCEL_TOKEN }}"
