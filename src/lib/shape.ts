@@ -47,6 +47,34 @@ const ALIASES: Record<string, string> = {
   macedonia: 'north macedonia',
   'the bahamas': 'bahamas',
   'falkland islands': 'falkland is',
+  'russian federation': 'russia',
+  'republic of korea': 'south korea',
+  'dem rep korea': 'north korea',
+  'lao pdr': 'laos',
+  'brunei darussalam': 'brunei',
+  'cape verde': 'cabo verde',
+  'macedonia former yugoslav republic of': 'macedonia',
+  'the gambia': 'gambia',
+  'republic of congo': 'congo',
+  'federated states of micronesia': 'micronesia',
+  'faeroe islands': 'faeroe is',
+  'aland islands': 'aland',
+  'cook islands': 'cook is',
+  'cayman islands': 'cayman is',
+  'british virgin islands': 'british virgin is',
+  'united states virgin islands': 'u s virgin is',
+  'northern mariana islands': 'n mariana is',
+  'turks and caicos islands': 'turks and caicos is',
+  'wallis and futuna islands': 'wallis and futuna is',
+  'heard i and mcdonald islands': 'heard i and mcdonald is',
+  'french southern and antarctic lands': 'fr s antarctic lands',
+  'french polynesia': 'fr polynesia',
+  'saint pierre and miquelon': 'st pierre and miquelon',
+  'saint barthelemy': 'st barthelemy',
+  'saint martin': 'st martin',
+  'saint kitts and nevis': 'st kitts and nevis',
+  'saint vincent and the grenadines': 'st vin and gren',
+  'antigua and barbuda': 'antigua and barb',
 };
 
 let countries: Promise<Map<string, GeoJSON.Geometry>> | null = null;
@@ -169,4 +197,43 @@ export function shapeFromRings(rings: number[][]): Shape | null {
     }
   const bbox: BBox = [w, s, e, n];
   return { rings: out, bbox, index: buildBandIndex(out, bbox) };
+}
+
+/** Rings at least this share of the largest ring's area count as the main landmass. */
+const MAIN_SHARE = 0.25;
+
+/** Ground area of a ring, up to a constant: shoelace in degrees scaled by cos(mean latitude). */
+function ringArea(r: Float64Array): number {
+  let a = 0, lat = 0;
+  for (let j = 0, k = r.length - 2; j < r.length; k = j, j += 2) {
+    a += r[k] * r[j + 1] - r[j] * r[k + 1];
+    lat += r[j + 1];
+  }
+  return Math.abs(a / 2) * Math.cos(((lat / (r.length / 2)) * Math.PI) / 180);
+}
+
+/**
+ * Box of the main landmass, leaving out far-off islands and territories (Easter Island for Chile,
+ * Alaska and Hawaii for the USA, French Guiana for France) that would turn a picture of the area
+ * into open ocean.
+ */
+export function mainBox(shape: Shape): BBox {
+  const areas = shape.rings.map(ringArea);
+  const max = Math.max(...areas);
+  // `w2`/`e2` measure longitudes in 0..360, for landmasses that touch the antimeridian (Russia)
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity, w2 = Infinity, e2 = -Infinity;
+  shape.rings.forEach((r, i) => {
+    if (areas[i] < MAIN_SHARE * max) return;
+    for (let j = 0; j < r.length; j += 2) {
+      const lon = r[j], lon2 = lon < 0 ? lon + 360 : lon;
+      w = Math.min(w, lon);
+      e = Math.max(e, lon);
+      w2 = Math.min(w2, lon2);
+      e2 = Math.max(e2, lon2);
+      s = Math.min(s, r[j + 1]);
+      n = Math.max(n, r[j + 1]);
+    }
+  });
+  if (!(w < e && s < n)) return shape.bbox;
+  return e2 - w2 < e - w ? [w2, s, e2, n] : [w, s, e, n];
 }

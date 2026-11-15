@@ -57,6 +57,9 @@ export const api = {
   aoiGeometry: (aoi: string, signal?: AbortSignal) => json<AoiGeometry>(`/api/aoi/geometry?${qs({ aoi })}`, signal),
   hotspotsCoverage: (p: { bbox: BBox; from: string; to: string }, signal?: AbortSignal) =>
     json<HotspotCoverage>(`/api/hotspots/coverage?${qs({ bbox: p.bbox.join(','), from: p.from, to: p.to })}`, signal),
+  /** Ask the server to download a span from FIRMS in the background (the next timeline step). */
+  hotspotsWarm: (p: { bbox: BBox; from: string; to: string }) =>
+    apiFetch(`/api/hotspots/warm?${qs({ bbox: p.bbox.join(','), from: p.from, to: p.to })}`, { method: 'POST' }).then(() => undefined),
   anomalies: (aoi: string, signal?: AbortSignal) => json<Anomaly[]>(`/api/anomalies?${qs({ aoi })}`, signal),
   enso: (aoi: string, signal?: AbortSignal) => json<EnsoResponse>(`/api/enso?${qs({ aoi })}`, signal),
   alerts: (aoi: string, signal?: AbortSignal) => json<AlertAssessment>(`/api/alerts?${qs({ aoi })}`, signal),

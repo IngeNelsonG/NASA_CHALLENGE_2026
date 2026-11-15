@@ -849,6 +849,7 @@ def create_app(
         recent_src=recent_src,
         data_dir=data_dir,
         firms=_firms_hotspots(settings),
+        warm_up=settings.environment != "test",
     )
 
     return app

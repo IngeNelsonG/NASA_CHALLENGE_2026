@@ -101,7 +101,8 @@ async function hotspots(p: { bbox: BBox; from: string; to: string; track?: boole
   }
   if (p.rings?.length) {
     const shape = shapeFromRings(p.rings);
-    if (shape) all = all.filter((h) => inShape(shape, h.lon, h.lat));
+    // outlines across the antimeridian may be stored in 0..360 while points come in -180..180
+    if (shape) all = all.filter((h) => inShape(shape, h.lon, h.lat) || (h.lon < 0 && inShape(shape, h.lon + 360, h.lat)));
   }
   if (p.track) lastHotspots = all;
 

@@ -247,6 +247,7 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     const country = aoi.kind === 'country';
     return jsonRes({ id: aoi.id, kind: country ? 'country' : 'box', country: country ? aoi.name : null, geometry: null });
   }
+  if (route === '/api/hotspots/warm') return jsonRes({ queued: false });
   if (route === '/api/hotspots/coverage') return jsonRes({ source: 'archive', firmsConfigured: false, maxDays: 62 });
   if (route === '/api/satellites/tle') return jsonRes(tle);
   if (route === '/api/analyst' && init?.method === 'POST') {

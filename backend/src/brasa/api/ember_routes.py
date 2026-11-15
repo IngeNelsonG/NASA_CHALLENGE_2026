@@ -11,9 +11,11 @@ from __future__ import annotations
 import json
 import logging
 import math
+import threading
 import time
 import unicodedata
 from collections.abc import Iterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from functools import lru_cache
@@ -32,8 +34,9 @@ from brasa.api.hotspot_sources import (
     FIRMS_MAX_SPAN_DAYS,
     ORINOQUIA,
     FirmsHotspots,
-    hotspot_source,
+    areas_source,
     merge_geometries,
+    parse_areas,
 )
 from brasa.api.service import (
     ONI_FILE,
@@ -57,6 +60,9 @@ Resolution = Literal["day", "week", "month"]
 MODIS_START = date(2000, 11, 1)
 VIIRS_FIRST_LIGHT = date(2012, 1, 20)
 HOTSPOT_POINT_CAP = 25_000
+# Calendars built at startup: the landing page's default area and Colombia (client RECORD_START).
+WARM_AOIS = ("co-orinoquia", "co")
+RECORD_START = "2000-01-01"
 MIN_RING_POINTS = 3
 MIN_STAT_SAMPLES = 2
 DECEMBER = 12
@@ -1436,7 +1442,7 @@ def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, buil
         sensor: Literal["modis", "viirs", "all"] = "all",
     ) -> list[dict[str, Any]]:
         try:
-            area = BoundingBox.parse(bbox)
+            areas = parse_areas(bbox)
         except InvalidBoundingBoxError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         if from_str and to_str:
@@ -1454,20 +1460,43 @@ def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, buil
             ) from exc
         if start_d > end_d:
             raise HTTPException(status_code=422, detail="`from` must not be after `to`.")
-        source = hotspot_source(area, start_d, end_d, firms_available=ctx.firms is not None)
-        if source == "firms" and ctx.firms is not None:
-            rows_df = ctx.firms.fetch(area, start_d, end_d)
-            if sensor in {"modis", "viirs"} and not rows_df.empty:
-                rows_df = rows_df[rows_df["sensor"] == sensor.upper()]
-        else:
-            rows_df = _query_hotspots_df(
+        source = areas_source(areas, start_d, end_d, firms_available=ctx.firms is not None)
+        if source == "too_long":
+            # Points outside Colombia come live from FIRMS for short spans only; answering with
+            # the few archive points that fall inside Colombia's box would draw a misleading map.
+            return []
+        firms = ctx.firms if source == "firms" else None
+
+        def rows_for(area: BoundingBox) -> pd.DataFrame:
+            if firms is not None:
+                rows_df = firms.fetch(area, start_d, end_d)
+                if sensor in {"modis", "viirs"} and not rows_df.empty:
+                    rows_df = rows_df[rows_df["sensor"] == sensor.upper()]
+                return rows_df
+            return _query_hotspots_df(
                 ctx,
                 area,
                 start_ts=pd.Timestamp(start_d),
                 end_ts_excl=pd.Timestamp(end_d) + pd.Timedelta(days=1),
                 sensor=sensor,
             )
-        return _serialize_hotspots(rows_df)
+
+        # the two halves of an area across the antimeridian download at the same time
+        with ThreadPoolExecutor(max_workers=len(areas)) as pool:
+            frames = list(pool.map(rows_for, areas))
+        rows = [f for f in frames if not f.empty]
+        return _serialize_hotspots(pd.concat(rows, ignore_index=True) if rows else frames[0])
+
+
+def _parse_span(bbox: str, from_str: str, to_str: str) -> tuple[list[BoundingBox], date, date]:
+    try:
+        areas = parse_areas(bbox)
+        start_d, end_d = date.fromisoformat(from_str), date.fromisoformat(to_str)
+    except (InvalidBoundingBoxError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid bbox or dates.") from exc
+    if start_d > end_d:
+        raise HTTPException(status_code=422, detail="`from` must not be after `to`.")
+    return areas, start_d, end_d
 
 
 def _register_area_routes(app: FastAPI, ctx: _EmberContext) -> None:
@@ -1478,16 +1507,27 @@ def _register_area_routes(app: FastAPI, ctx: _EmberContext) -> None:
         to_str: str = Query(alias="to", max_length=10),
     ) -> dict[str, Any]:
         """Where the points for this area and span come from, so the UI can explain gaps."""
-        try:
-            area = BoundingBox.parse(bbox)
-            start_d, end_d = date.fromisoformat(from_str), date.fromisoformat(to_str)
-        except (InvalidBoundingBoxError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail="Invalid bbox or dates.") from exc
+        areas, start_d, end_d = _parse_span(bbox, from_str, to_str)
         return {
-            "source": hotspot_source(area, start_d, end_d, firms_available=ctx.firms is not None),
+            "source": areas_source(areas, start_d, end_d, firms_available=ctx.firms is not None),
             "firmsConfigured": ctx.firms is not None,
             "maxDays": FIRMS_MAX_SPAN_DAYS,
         }
+
+    @app.post("/api/hotspots/warm")
+    def api_hotspots_warm(
+        bbox: str = Query(max_length=120),
+        from_str: str = Query(alias="from", max_length=10),
+        to_str: str = Query(alias="to", max_length=10),
+    ) -> dict[str, bool]:
+        """Pre-download a span from FIRMS in the background (the next timeline step), so it is
+        already cached when the user gets there. Archive areas need no warm-up."""
+        areas, start_d, end_d = _parse_span(bbox, from_str, to_str)
+        firms = ctx.firms
+        if firms is None or areas_source(areas, start_d, end_d, firms_available=True) != "firms":
+            return {"queued": False}
+        queued = [firms.warm(area, start_d, end_d) for area in areas]
+        return {"queued": any(queued)}
 
     @app.get("/api/aoi/geometry")
     def api_aoi_geometry(aoi: str = Query(max_length=120)) -> dict[str, Any]:
@@ -1880,6 +1920,7 @@ def register_ember_routes(
     recent_src: RecentSource | None,
     data_dir: Path,
     firms: FirmsHotspots | None = None,
+    warm_up: bool = False,
 ) -> None:
     """Register unified /api/* endpoints backed by real NASA FIRMS archives."""
     aoi_by_id, aoi_ordered = _build_aoi_index(department_collection, world_collection, countries)
@@ -1980,3 +2021,18 @@ def register_ember_routes(
 
     _register_area_routes(app, ctx)
     _register_intel_routes(app, ctx, _build_calendar_payload)
+
+    if warm_up:
+        # Pre-build the calendars the landing page asks for first, so the first visitor
+        # does not pay for them. Same arguments as the client sends, so the lru_cache hits.
+        def _warm() -> None:
+            today = date.today().isoformat()
+            for aoi_id in WARM_AOIS:
+                for res in ("month", "day"):
+                    try:
+                        stamp = _recent_stamp(ctx)
+                        _build_calendar_payload(aoi_id, RECORD_START, today, res, stamp)
+                    except Exception:  # pragma: no cover - warm-up is best effort
+                        logger.warning("Calendar warm-up failed for %s", aoi_id)
+
+        threading.Thread(target=_warm, name="calendar-warm", daemon=True).start()

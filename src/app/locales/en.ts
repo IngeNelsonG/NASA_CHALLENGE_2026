@@ -93,6 +93,8 @@ export const en = {
   'aoi.searching': 'Searching…',
   'aoi.none': 'No matching area',
   'aoi.current': 'Current area',
+  'aoi.undo': 'Undo selection',
+  'aoi.undo_to': 'Back to {name}',
   'aoi.draw': 'Draw rectangle',
   'aoi.drawing': 'Drag on the map…',
   'aoi.or_click': 'Or click any country on the globe or map to select it, or click elsewhere to inspect that point.',

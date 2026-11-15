@@ -44,6 +44,8 @@ export function Explorer() {
   const webgl = useStore((s) => s.webgl);
   const tool = useStore((s) => s.tool);
   const aoi = useStore((s) => s.aoi);
+  const prevAoi = useStore((s) => s.aoiHistory[s.aoiHistory.length - 1]);
+  const undoAoi = useStore((s) => s.undoAoi);
   const set = useStore((s) => s.set);
   useGlobeStage(stage, 'explore', { interactive: viewMode === '3d', layout: besidePanels });
 
@@ -77,6 +79,17 @@ export function Explorer() {
             <button type="button" className="btn btn-icon" onClick={() => useStore.getState().flyToAoi()} aria-label={t('globe.fit')} title={t('globe.fit')}>
               <span aria-hidden>⌖</span>
             </button>
+            {prevAoi && (
+              <button
+                type="button"
+                className="btn btn-icon"
+                onClick={undoAoi}
+                aria-label={`${t('aoi.undo')}: ${t('aoi.undo_to', { name: prevAoi.name })}`}
+                title={`${t('aoi.undo')} · ${t('aoi.undo_to', { name: prevAoi.name })}`}
+              >
+                <span aria-hidden>↶</span>
+              </button>
+            )}
           </div>
 
           <div className="pointer-events-none relative z-10 flex flex-col gap-3 px-3 pb-4 pt-3 sm:px-6 lg:absolute lg:inset-0 lg:grid lg:grid-cols-[22.5rem_1fr] lg:grid-rows-[1fr_auto] lg:gap-4 lg:px-6 lg:pb-6 lg:pt-24 xl:pl-24">
@@ -111,6 +124,17 @@ export function Explorer() {
                     <span className="block truncate font-semibold text-ink" title={aoi.name}>
                       {aoi.name}
                     </span>
+                    {prevAoi && (
+                      <button
+                        type="button"
+                        onClick={undoAoi}
+                        className="mt-1 inline-flex max-w-full items-center gap-1 text-xs text-ink-dim underline-offset-4 hover:text-ink hover:underline"
+                        title={t('aoi.undo')}
+                      >
+                        <span aria-hidden>↶</span>
+                        <span className="truncate">{t('aoi.undo_to', { name: prevAoi.name })}</span>
+                      </button>
+                    )}
                   </p>
                   <button
                     type="button"

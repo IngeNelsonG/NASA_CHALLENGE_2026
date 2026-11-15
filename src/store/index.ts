@@ -34,6 +34,9 @@ export type LayerId = 'density' | 'terminator' | 'orbits' | 'borders';
 export type DateRange = { from: string; to: string };
 export type TimeScale = 1 | 60 | 600;
 
+/** How many previous areas "undo selection" can step back through. */
+const HISTORY = 10;
+
 export const DEFAULT_AOI: AOI = { id: 'co-orinoquia', name: 'Orinoquía, Colombia', bbox: [-74.0, 2.0, -67.4, 7.2] };
 
 const storedLang = (): Lang => {
@@ -52,6 +55,8 @@ type State = {
   viewMode: '3d' | '2d';
   layers: Record<LayerId, boolean>;
   aoi: AOI;
+  /** areas selected before the current one, most recent last (for "undo selection") */
+  aoiHistory: AOI[];
   picked: { lat: number; lon: number } | null;
   date: string;
   granularity: Granularity;
@@ -69,6 +74,8 @@ type State = {
   set: (p: Partial<State>) => void;
   toggleLayer: (id: LayerId) => void;
   setAoi: (aoi: AOI, fly?: boolean) => void;
+  /** Go back to the previously selected area (e.g. after a misclick on the globe). */
+  undoAoi: () => void;
   flyToAoi: () => void;
   /** Calendar → globe: jump the timeline to a date and bring the explorer into view. */
   focusDate: (date: string, granularity?: Granularity) => void;
@@ -87,6 +94,7 @@ export const useStore = create<State>((set, get) => ({
   viewMode: '3d',
   layers: { density: false, terminator: true, orbits: true, borders: true },
   aoi: DEFAULT_AOI,
+  aoiHistory: [],
   picked: null,
   date: todayIso(),
   granularity: 'month',
@@ -111,8 +119,21 @@ export const useStore = create<State>((set, get) => ({
   set: (p) => set(p),
   toggleLayer: (id) => set((s) => ({ layers: { ...s.layers, [id]: !s.layers[id] } })),
   setAoi: (aoi, fly = true) => {
-    set({ aoi, picked: null, highlights: [] });
+    const prev = get().aoi;
+    set((s) => ({
+      aoi,
+      picked: null,
+      highlights: [],
+      aoiHistory: prev.id === aoi.id ? s.aoiHistory : [...s.aoiHistory, prev].slice(-HISTORY),
+    }));
     if (fly) get().flyToAoi();
+  },
+  undoAoi: () => {
+    const history = get().aoiHistory;
+    const prev = history[history.length - 1];
+    if (!prev) return;
+    set({ aoi: prev, aoiHistory: history.slice(0, -1), picked: null, highlights: [] });
+    get().flyToAoi();
   },
   flyToAoi: () => {
     const { bbox } = get().aoi;

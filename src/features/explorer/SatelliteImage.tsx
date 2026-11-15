@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { fmtDay, useT } from '@/app/i18n';
 import { Segmented } from '@/components/ui';
 import { gibsImage, IMAGE_VIEWS, imageSensor, SENSOR_LABEL, worldviewUrl, type ImageSensor, type ImageView } from '@/lib/gibs';
 import { dayIdx, isoDay, todayIso } from '@/lib/geo';
+import { mainBox } from '@/lib/shape';
 import { timelineRange, useStore } from '@/store';
 import { useData } from '@/store/data';
 
@@ -20,9 +21,11 @@ export function SatelliteImage() {
   const peakDay = useData((s) => s.hotspots?.peakDay ?? null);
   const shape = useData((s) => (s.shapeFor === aoi.id ? s.shape : null));
   const [view, setView] = useState<ImageView>('true-color');
-  const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
-  // if the preferred satellite has no picture that day, fall back to MODIS once
-  const [fallback, setFallback] = useState(false);
+  // Load state belongs to one URL: a cached image can fire `load` before an effect could reset a
+  // shared flag, which left the picture hidden, so the state is keyed by URL instead of reset.
+  const [loaded, setLoaded] = useState<{ url: string; ok: boolean } | null>(null);
+  // if the preferred satellite has no picture that day, fall back to MODIS once (keyed the same way)
+  const [fallbackFor, setFallbackFor] = useState('');
 
   const range = timelineRange(date, granularity);
   // imagery for "today" is often not processed yet: never ask past yesterday
@@ -32,11 +35,11 @@ export function SatelliteImage() {
   if (day > yesterday) day = yesterday;
   const isPeak = granularity !== 'day' && day === peakDay;
 
-  const bbox = shape?.bbox ?? aoi.bbox;
-  const sensor: ImageSensor = fallback ? 'MODIS' : imageSensor(day);
+  const bbox = shape ? mainBox(shape) : aoi.bbox;
+  const pictureKey = `${day}|${view}|${bbox.join(',')}`;
+  const sensor: ImageSensor = fallbackFor === pictureKey ? 'MODIS' : imageSensor(day);
   const img = gibsImage(bbox, day, view, sensor);
-  useEffect(() => setState('loading'), [img.url]);
-  useEffect(() => setFallback(false), [day, view, bbox[0], bbox[1], bbox[2], bbox[3]]);
+  const state = loaded?.url !== img.url ? 'loading' : loaded.ok ? 'ok' : 'error';
 
   return (
     <section aria-labelledby="sat-title" className="panel pointer-events-auto overflow-hidden">
@@ -66,8 +69,8 @@ export function SatelliteImage() {
           alt={t(`satimg.alt_${view}`, { place: aoi.name, day: fmtDay(day, lang) })}
           loading="lazy"
           decoding="async"
-          onLoad={() => setState('ok')}
-          onError={() => (sensor !== 'MODIS' ? setFallback(true) : setState('error'))}
+          onLoad={() => setLoaded({ url: img.url, ok: true })}
+          onError={() => (sensor !== 'MODIS' ? setFallbackFor(pictureKey) : setLoaded({ url: img.url, ok: false }))}
           className={`block h-full w-full object-cover transition-opacity duration-700 ${state === 'ok' ? 'opacity-100' : 'opacity-0'}`}
         />
       </div>

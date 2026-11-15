@@ -95,6 +95,8 @@ export const es: Record<keyof typeof en, string> = {
   'aoi.searching': 'Buscando…',
   'aoi.none': 'Ningún área coincide',
   'aoi.current': 'Área actual',
+  'aoi.undo': 'Deshacer selección',
+  'aoi.undo_to': 'Volver a {name}',
   'aoi.draw': 'Dibujar rectángulo',
   'aoi.drawing': 'Arrastra sobre el mapa…',
   'aoi.or_click': 'O haz clic en cualquier país del globo o mapa para seleccionarlo, o en otro punto para inspeccionarlo.',

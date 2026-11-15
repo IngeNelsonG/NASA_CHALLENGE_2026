@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { RECORD_START } from '@/lib/env';
 import { todayIso } from '@/lib/geo';
@@ -10,6 +10,9 @@ import { callWorker } from '@/lib/worker-client';
 import { view } from '@/scenes/view';
 import { timelineRange, useStore } from '@/store';
 import { useData } from '@/store/data';
+
+/** First day of the month `k` months away from `date`. */
+const monthStart = (date: string, k: number) => new Date(Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1 + k, 1)).toISOString().slice(0, 10);
 
 export const calendarKey = (aoiId: string, resolution: Resolution) => `${aoiId}|${resolution}`;
 
@@ -85,11 +88,33 @@ export function DataLoaders() {
   });
   useEffect(() => useData.setState({ coverage: coverage.data ?? null }), [coverage.data]);
 
+  // When the AOI changes, park the timeline on its most recent peak month so the globe is not empty.
+  const monthly = useCalendar('month', phase === 'landing');
+  // the points wait for this: fetching the month the timeline happened to be on would be thrown away
+  const [parkedFor, setParkedFor] = useState('');
+  // timeline position when the area changed: if the user moves it before the calendar arrives,
+  // their choice wins and the timeline is not yanked back to the peak month
+  const atSelect = useRef({ aoi: '', date: '', granularity: '' });
+  useEffect(() => {
+    const s = useStore.getState();
+    atSelect.current = { aoi: aoi.id, date: s.date, granularity: s.granularity };
+  }, [aoi.id]);
+  useEffect(() => {
+    const cells = monthly.data?.response.cells;
+    if (!cells || monthly.data?.response.aoi.id !== aoi.id || parkedFor === aoi.id) return;
+    setParkedFor(aoi.id);
+    const s = useStore.getState(), at = atSelect.current;
+    if (at.aoi === aoi.id && (s.date !== at.date || s.granularity !== at.granularity)) return;
+    let best = cells[cells.length - 1];
+    for (const c of cells.slice(-24)) if ((c.harmonized ?? -1) > (best?.harmonized ?? -1)) best = c;
+    if (best) useStore.getState().set({ date: best.date, granularity: 'month' });
+  }, [monthly.data, aoi.id, parkedFor]);
+
   const hot = useQuery({
     queryKey: ['hotspots', aoi.id, aoi.bbox.join(','), range.from, range.to, !!shape],
     queryFn: () => callWorker('hotspots', { bbox: aoi.bbox, from: range.from, to: range.to, track: true, rings: ringsOf(shape) }),
     // wait for the outline so the points are clipped once, not fetched twice
-    enabled: phase === 'landing' && shapeReady,
+    enabled: phase === 'landing' && shapeReady && (parkedFor === aoi.id || monthly.isError),
     placeholderData: keepPreviousData,
     gcTime: 60_000,
   });
@@ -98,17 +123,16 @@ export function DataLoaders() {
     view.kick();
   }, [hot.data, hot.isFetching]);
 
-  // When the AOI changes, park the timeline on its most recent peak month so the globe is not empty.
-  const monthly = useCalendar('month', phase === 'landing');
-  const parked = useRef('');
+  // Outside Colombia the points come live from NASA FIRMS (slow): once this period is shown, ask the
+  // server to download the neighbouring ones in the background, so stepping or playing is instant.
+  // A day view warms its whole month (any day inside a downloaded month is then free).
+  const source = coverage.data?.source;
+  const hotReady = !!hot.data && !hot.isFetching;
   useEffect(() => {
-    const cells = monthly.data?.response.cells;
-    if (!cells || monthly.data?.response.aoi.id !== aoi.id || parked.current === aoi.id) return;
-    parked.current = aoi.id;
-    let best = cells[cells.length - 1];
-    for (const c of cells.slice(-24)) if ((c.harmonized ?? -1) > (best?.harmonized ?? -1)) best = c;
-    if (best) useStore.getState().set({ date: best.date, granularity: 'month' });
-  }, [monthly.data, aoi.id]);
+    if (!hotReady || source !== 'firms' || granularity === 'year') return;
+    const spans = granularity === 'day' ? [timelineRange(date, 'month')] : [1, -1].map((k) => timelineRange(monthStart(date, k), 'month'));
+    for (const r of spans) if (r.from <= todayIso()) api.hotspotsWarm({ bbox: aoi.bbox, ...r }).catch(() => undefined);
+  }, [hotReady, source, date, granularity, aoi.bbox]);
 
   return null;
 }

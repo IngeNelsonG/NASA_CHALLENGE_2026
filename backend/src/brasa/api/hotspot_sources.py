@@ -15,12 +15,13 @@ import logging
 import threading
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date, timedelta
 from typing import Any, Literal
 
 import pandas as pd
 
-from brasa.domain.models import COLOMBIA, BoundingBox
+from brasa.domain.models import COLOMBIA, MAX_LONGITUDE, BoundingBox, InvalidBoundingBoxError
 from brasa.ingestion.firms_client import MAX_DAY_RANGE, FirmsClient, FirmsSource
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,8 @@ VIIRS_SP_START = date(2012, 1, 20)
 MODIS_MIN_CONFIDENCE = 30
 VIIRS_KEPT_CONFIDENCE = frozenset({"n", "h", "nominal", "high"})
 CACHE_SIZE = 96
+# Parallel FIRMS requests per download (a month is 7 chunks x 2 sources); well inside the quota.
+FIRMS_PARALLEL = 6
 SATELLITE_NAMES = {
     "T": "Terra",
     "A": "Aqua",
@@ -47,6 +50,41 @@ SATELLITE_NAMES = {
 OUT_COLS = ["latitude", "longitude", "acq_date", "acq_time", "sensor", "satellite", "frp"]
 
 Source = Literal["archive", "firms", "partial", "too_long", "none"]
+# When an area spans two boxes, the least complete source describes it.
+_SOURCE_RANK: dict[Source, int] = {"archive": 0, "firms": 1, "partial": 2, "none": 3, "too_long": 4}
+FULL_TURN = 360.0
+BBOX_PARTS = 4
+
+
+def parse_areas(raw: str) -> list[BoundingBox]:
+    """'west,south,east,north' as one box, or two when the area crosses the antimeridian.
+
+    Countries such as Russia, New Zealand or Fiji are stored unwrapped (east > 180), which
+    BoundingBox and the FIRMS API reject, so they are split at 180 degrees.
+    """
+    parts = raw.split(",")
+    if len(parts) != BBOX_PARTS:
+        raise InvalidBoundingBoxError("Expected 4 values: west,south,east,north.")
+    try:
+        west, south, east, north = (float(part) for part in parts)
+    except ValueError as error:
+        raise InvalidBoundingBoxError("Coordinates must be numeric.") from error
+    if east <= MAX_LONGITUDE:
+        return [BoundingBox(west, south, east, north)]
+    if west >= MAX_LONGITUDE:
+        return [BoundingBox(west - FULL_TURN, south, east - FULL_TURN, north)]
+    return [
+        BoundingBox(west, south, MAX_LONGITUDE, north),
+        BoundingBox(-MAX_LONGITUDE, south, east - FULL_TURN, north),
+    ]
+
+
+def areas_source(
+    areas: Sequence[BoundingBox], start: date, end: date, *, firms_available: bool
+) -> Source:
+    """Source for one or more boxes: the least complete of them."""
+    sources = [hotspot_source(a, start, end, firms_available=firms_available) for a in areas]
+    return max(sources, key=_SOURCE_RANK.__getitem__)
 
 
 def archive_covers(area: BoundingBox) -> bool:
@@ -127,44 +165,92 @@ def normalize_firms_frame(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 class FirmsHotspots:
-    """FIRMS Area API downloads for one bbox and date span, cached in memory (LRU)."""
+    """FIRMS Area API downloads for one bbox and date span, cached in memory (LRU).
+
+    Chunks are requested in parallel, a span inside an already downloaded one is cut from it
+    (a day inside a cached month costs nothing), and `warm` downloads a span in the background
+    so the next timeline step is already cached when the user gets there.
+    """
 
     def __init__(self, client: FirmsClient, today: Callable[[], date] = date.today) -> None:
         self._client = client
         self._today = today
         self._cache: OrderedDict[tuple[str, date, date], pd.DataFrame] = OrderedDict()
+        self._inflight: dict[tuple[str, date, date], Future[pd.DataFrame]] = {}
         self._lock = threading.Lock()
+        self._background = ThreadPoolExecutor(max_workers=2, thread_name_prefix="firms-warm")
+
+    def _cached(self, key: tuple[str, date, date]) -> pd.DataFrame | None:
+        """Exact hit, or the slice of a cached span containing this one. Caller holds the lock."""
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            return self._cache[key]
+        area, start, end = key
+        for (c_area, c_start, c_end), frame in reversed(self._cache.items()):
+            if c_area == area and c_start <= start and end <= c_end:
+                if frame.empty:
+                    return frame
+                days = frame["acq_date"]
+                return frame[(days >= pd.Timestamp(start)) & (days <= pd.Timestamp(end))]
+        return None
 
     def fetch(self, area: BoundingBox, start: date, end: date) -> pd.DataFrame:
         key = (area.as_firms_area(), start, end)
         with self._lock:
-            if key in self._cache:
-                self._cache.move_to_end(key)
-                return self._cache[key]
-        frames: list[pd.DataFrame] = []
+            hit = self._cached(key)
+            if hit is not None:
+                return hit
+            pending = self._inflight.get(key)
+            if pending is None:
+                future: Future[pd.DataFrame] = Future()
+                self._inflight[key] = future
+        if pending is not None:  # the same span is already downloading (e.g. a warm-up)
+            return pending.result()
+        try:
+            result = self._download(area, start, end)
+            with self._lock:
+                self._cache[key] = result
+                while len(self._cache) > CACHE_SIZE:
+                    self._cache.popitem(last=False)
+            future.set_result(result)
+            return result
+        except BaseException as exc:  # pragma: no cover - _download never raises
+            future.set_exception(exc)
+            raise
+        finally:
+            with self._lock:
+                self._inflight.pop(key, None)
+
+    def warm(self, area: BoundingBox, start: date, end: date) -> bool:
+        """Download a span in the background; False when it is already cached or downloading."""
+        key = (area.as_firms_area(), start, end)
+        with self._lock:
+            if key in self._inflight or self._cached(key) is not None:
+                return False
+        self._background.submit(self.fetch, area, start, end)
+        return True
+
+    def _download(self, area: BoundingBox, start: date, end: date) -> pd.DataFrame:
         today = self._today()
+        jobs: list[tuple[FirmsSource, date, int]] = []
         cur = start
         while cur <= end:
             span = min(MAX_DAY_RANGE, (end - cur).days + 1)
             chunk_end = cur + timedelta(days=span - 1)
-            for source in _sources_for(chunk_end, today):
-                try:
-                    frames.append(
-                        normalize_firms_frame(self._client.fetch_area(source, area, cur, span))
-                    )
-                except Exception:  # network, HTTP or CSV errors: degrade, never raise
-                    logger.warning("FIRMS area request failed (source=%s, start=%s)", source, cur)
+            jobs.extend((source, cur, span) for source in _sources_for(chunk_end, today))
             cur = chunk_end + timedelta(days=1)
-        result = (
-            pd.concat([f for f in frames if not f.empty], ignore_index=True)
-            if any(not f.empty for f in frames)
-            else pd.DataFrame(columns=OUT_COLS)
-        )
-        with self._lock:
-            self._cache[key] = result
-            while len(self._cache) > CACHE_SIZE:
-                self._cache.popitem(last=False)
-        return result
+
+        def one(job: tuple[FirmsSource, date, int]) -> pd.DataFrame:
+            source, day, span = job
+            try:
+                return normalize_firms_frame(self._client.fetch_area(source, area, day, span))
+            except Exception:  # network, HTTP or CSV errors: degrade, never raise
+                logger.warning("FIRMS area request failed (source=%s, start=%s)", source, day)
+                return pd.DataFrame(columns=OUT_COLS)
+
+        with ThreadPoolExecutor(max_workers=min(FIRMS_PARALLEL, len(jobs) or 1)) as pool:
+            frames = [f for f in pool.map(one, jobs) if not f.empty]
+        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=OUT_COLS)
 
 
 # ---- outlines ----------------------------------------------------------------------------------

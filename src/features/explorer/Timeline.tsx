@@ -36,7 +36,10 @@ export function Timeline() {
   const g = useStore((s) => s.granularity);
   const playing = useStore((s) => s.playing);
   const set = useStore((s) => s.set);
-  const hot = useData((s) => s.hotspots);
+  // no points for this span (e.g. a whole year outside Colombia), or still loading another span:
+  // the previous count would mislead
+  const noPoints = useData((s) => s.coverage?.source === 'too_long' || s.coverage?.source === 'none');
+  const hot = useData((s) => (noPoints ? null : s.hotspots));
   const loading = useData((s) => s.hotspotsLoading);
   const mdl = model(g, date);
 
@@ -108,7 +111,7 @@ export function Timeline() {
         )}
         <span className="ml-auto flex items-center gap-3 text-xs text-ink-dim">
           {loading && <Spinner label={t('time.loading')} />}
-          {hot && (
+          {hot && !loading && (
             <span className="data flex items-center gap-2">
               <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: HOTSPOT_COLOR }} /> {fmtInt(hot.count, lang)} {t('time.hotspots')}
             </span>
