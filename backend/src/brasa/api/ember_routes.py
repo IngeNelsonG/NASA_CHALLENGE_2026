@@ -40,7 +40,6 @@ from brasa.alerts.newsletter import (
     SmtpStatusResponse,
     SubscriptionRequest,
     SubscriptionResponse,
-    count_subscribers,
     subscribe_and_notify,
 )
 from brasa.alerts.schemas import AlertItem
@@ -2016,10 +2015,10 @@ def _register_newsletter_routes(
         cfg = SmtpConfig.from_env()
         return SmtpStatusResponse(
             configured=cfg.configured,
-            host=cfg.host if cfg.configured else None,
+            host=None,
             port=cfg.port,
-            from_email=cfg.from_email,
-            subscribers_count=count_subscribers(ctx.data_dir),
+            from_email=None,
+            subscribers_count=0,
         )
 
     @app.post("/api/alerts/subscribe", response_model=SubscriptionResponse)

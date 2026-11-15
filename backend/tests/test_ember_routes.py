@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+from brasa.alerts import newsletter
 from brasa.alerts.detector import _enso_phase, is_enso_relevant
 from brasa.api.app import create_app
 from brasa.api.ember_routes import (
@@ -306,4 +307,49 @@ def test_analyst_spanish_reply_uses_spanish_number_formatting(ember_client: Test
     assert re.search(r"\d,\d{3}", full_reply) is None
     assert all(re.search(r"\d,\d{3}", h.get("reason", "")) is None for h in highlights)
     assert re.search(r"\d+,\d+", full_reply) is not None
+
+
+def test_subscribe_world_readonly_fallback_and_smtp_status_no_leak(
+    ember_client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setenv("SMTP_USER", "alerts-sender@example.org")
+    monkeypatch.setenv("SMTP_PASSWORD", "secret")
+
+    status = ember_client.get("/api/alerts/smtp-status")
+    assert status.status_code == 200
+    status_body = status.json()
+    assert status_body["configured"] is True
+    assert status_body["host"] is None
+    assert status_body["from_email"] is None
+    assert status_body["subscribers_count"] == 0
+
+    orig_write = newsletter._write_subscriptions_file
+    ro_path = tmp_path / "readonly" / "subs.json"
+
+    def _fail_primary(
+        path: Path, req: newsletter.SubscriptionRequest, record: dict[str, str]
+    ) -> None:
+        if path == ro_path:
+            raise PermissionError("Read-only file system")
+        orig_write(path, req, record)
+
+    monkeypatch.setattr(newsletter, "_subscriptions_path", lambda _dir: ro_path)
+    monkeypatch.setattr(newsletter, "_write_subscriptions_file", _fail_primary)
+
+    sub = ember_client.post(
+        "/api/alerts/subscribe",
+        json={
+            "email": "world-test@example.org",
+            "name": "World Tester",
+            "aoi_id": "world",
+            "min_severity": "WATCH",
+            "lang": "en",
+            "send_immediate_report": False,
+        },
+    )
+    assert sub.status_code == 200
+    assert sub.json()["aoi_id"] == "world"
+    assert sub.json()["status"] == "sent"
+
 

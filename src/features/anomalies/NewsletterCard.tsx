@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { fmtInt, useT } from '@/app/i18n';
+import { useT } from '@/app/i18n';
 import { api } from '@/lib/api';
 import type { AlertAssessment, AlertSubscriptionResponse } from '@/lib/types';
 import type { Lang } from '@/store';
@@ -25,7 +25,6 @@ export function NewsletterCard({
   lang,
 }: Props) {
   const t = useT();
-  const qc = useQueryClient();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [targetAoi, setTargetAoi] = useState(currentAoiId);
@@ -37,12 +36,6 @@ export function NewsletterCard({
   useEffect(() => {
     setTargetAoi(currentAoiId);
   }, [currentAoiId]);
-
-  const smtpQ = useQuery({
-    queryKey: ['smtp-status'],
-    queryFn: ({ signal }) => api.smtpStatus(signal),
-    staleTime: 60_000,
-  });
 
   const options = useMemo(() => {
     const map = new Map<string, string>();
@@ -65,7 +58,6 @@ export function NewsletterCard({
     onSuccess: (data) => {
       setErrMsg(null);
       setResult(data);
-      void qc.invalidateQueries({ queryKey: ['smtp-status'] });
     },
     onError: (err) => {
       setResult(null);
@@ -90,17 +82,6 @@ export function NewsletterCard({
             {t('news.title')}
           </h4>
           <p className="mt-3 text-sm leading-relaxed text-ink-dim">{t('news.lead')}</p>
-
-          {smtpQ.data && (
-            <p className="mt-5 border-t border-line/60 pt-4 text-xs leading-relaxed text-ink-mute">
-              {smtpQ.data.configured
-                ? t('news.smtp_ready', {
-                    host: smtpQ.data.host ?? 'SMTP',
-                    count: fmtInt(smtpQ.data.subscribers_count, lang),
-                  })
-                : t('news.smtp_pending', { count: fmtInt(smtpQ.data.subscribers_count, lang) })}
-            </p>
-          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -9,6 +9,7 @@ import os
 import re
 import smtplib
 import ssl
+import tempfile
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -31,6 +32,40 @@ SUBSCRIPTIONS_FILENAME = "alert_subscriptions.json"
 _FILE_LOCK = threading.Lock()
 
 
+def _read_dotenv_fallback() -> dict[str, str]:
+    """Read simple KEY=VALUE pairs from backend/.env or .env if not in process env."""
+    values: dict[str, str] = {}
+    candidates = [
+        Path(__file__).resolve().parents[3] / ".env",
+        Path(".env"),
+    ]
+    seen: set[Path] = set()
+    for path in candidates:
+        resolved = path.resolve()
+        if resolved in seen or not resolved.is_file():
+            continue
+        seen.add(resolved)
+        try:
+            for raw_line in resolved.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip()
+                if (
+                    len(val) > 1
+                    and val[0] == val[-1]
+                    and val[0] in {'"', "'"}
+                ):
+                    val = val[1:-1]
+                if key and key not in values:
+                    values[key] = val
+        except OSError:
+            continue
+    return values
+
+
 @dataclass(frozen=True)
 class SmtpConfig:
     """SMTP transport settings loaded from environment variables."""
@@ -48,22 +83,25 @@ class SmtpConfig:
 
     @classmethod
     def from_env(cls) -> SmtpConfig:
-        host = (os.getenv("SMTP_HOST") or os.getenv("BRASA_SMTP_HOST") or "").strip() or None
-        raw_port = (
-            os.getenv("SMTP_PORT") or os.getenv("BRASA_SMTP_PORT") or str(DEFAULT_SMTP_PORT)
-        ).strip()
+        dotenv = _read_dotenv_fallback()
+
+        def _get(*keys: str) -> str:
+            for key in keys:
+                val = (os.getenv(key) or dotenv.get(key) or "").strip()
+                if val:
+                    return val
+            return ""
+
+        host = _get("SMTP_HOST", "BRASA_SMTP_HOST") or None
+        raw_port = _get("SMTP_PORT", "BRASA_SMTP_PORT") or str(DEFAULT_SMTP_PORT)
         try:
             port = int(raw_port)
         except ValueError:
             port = DEFAULT_SMTP_PORT
-        user = (os.getenv("SMTP_USER") or os.getenv("BRASA_SMTP_USER") or "").strip() or None
-        password = (
-            os.getenv("SMTP_PASSWORD") or os.getenv("BRASA_SMTP_PASSWORD") or ""
-        ).strip() or None
-        from_email = (
-            os.getenv("SMTP_FROM") or os.getenv("BRASA_SMTP_FROM") or user or ""
-        ).strip() or None
-        tls_raw = (os.getenv("SMTP_USE_TLS") or os.getenv("BRASA_SMTP_USE_TLS") or "true").lower()
+        user = _get("SMTP_USER", "BRASA_SMTP_USER") or None
+        password = _get("SMTP_PASSWORD", "BRASA_SMTP_PASSWORD") or None
+        from_email = _get("SMTP_FROM", "BRASA_SMTP_FROM") or user or None
+        tls_raw = (_get("SMTP_USE_TLS", "BRASA_SMTP_USE_TLS") or "true").lower()
         use_tls = tls_raw in {"1", "true", "yes", "on", "starttls", "ssl"}
         return cls(
             host=host,
@@ -132,11 +170,37 @@ def count_subscribers(data_dir: Path) -> int:
         return 0
 
 
+def _write_subscriptions_file(
+    path: Path, req: SubscriptionRequest, record: dict[str, str]
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    entries: list[dict[str, str]] = []
+    if path.exists():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, list):
+                entries = [item for item in loaded if isinstance(item, dict)]
+        except (OSError, json.JSONDecodeError):
+            entries = []
+    updated = False
+    for idx, existing in enumerate(entries):
+        if existing.get("email") == req.email and existing.get("aoi_id") == req.aoi_id:
+            entries[idx] = record
+            updated = True
+            break
+    if not updated:
+        entries.append(record)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+
+
 def save_subscription(
     data_dir: Path, req: SubscriptionRequest, *, region_name: str
 ) -> dict[str, str]:
     """Persist or update a subscriber record deterministically by (email, aoi_id)."""
-    path = _subscriptions_path(data_dir)
+    primary = _subscriptions_path(data_dir)
+    fallback = Path(tempfile.gettempdir()) / f"brasa_{SUBSCRIPTIONS_FILENAME}"
     record = {
         "email": req.email,
         "name": req.name.strip(),
@@ -147,26 +211,12 @@ def save_subscription(
         "updated_at": datetime.now(UTC).isoformat(),
     }
     with _FILE_LOCK:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        entries: list[dict[str, str]] = []
-        if path.exists():
+        for candidate in (primary, fallback):
             try:
-                loaded = json.loads(path.read_text(encoding="utf-8"))
-                if isinstance(loaded, list):
-                    entries = [item for item in loaded if isinstance(item, dict)]
-            except (OSError, json.JSONDecodeError):
-                entries = []
-        updated = False
-        for idx, existing in enumerate(entries):
-            if existing.get("email") == req.email and existing.get("aoi_id") == req.aoi_id:
-                entries[idx] = record
-                updated = True
-                break
-        if not updated:
-            entries.append(record)
-        tmp = path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(path)
+                _write_subscriptions_file(candidate, req, record)
+                return record
+            except OSError as exc:
+                logger.warning("Could not persist subscription to %s: %s", candidate, exc)
     return record
 
 
@@ -367,8 +417,8 @@ def send_alert_email(
     """Send immediate subscription confirmation + current CAP-1.2 alert bulletin via SMTP."""
     if not cfg.configured or not cfg.host:
         return False, "SMTP host or sender not configured"
-    msg = _build_alert_email(cfg, req, alert)
     try:
+        msg = _build_alert_email(cfg, req, alert)
         context = ssl.create_default_context()
         if cfg.port == SSL_SMTP_PORT:
             with smtplib.SMTP_SSL(
