@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useT } from '@/app/i18n';
 import { Spinner } from '@/components/ui';
 import { AoiSearch } from '@/features/aoi/AoiSearch';
@@ -69,6 +69,8 @@ function useEscapeToClear() {
 export function Explorer() {
   const t = useT();
   const stage = useRef<HTMLDivElement>(null);
+  const mobileSearchRef = useRef<HTMLDivElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const viewMode = useStore((s) => s.viewMode);
   const webgl = useStore((s) => s.webgl);
   const tool = useStore((s) => s.tool);
@@ -81,6 +83,18 @@ export function Explorer() {
   const selected = !isWorld(aoi);
   useGlobeStage(stage, 'explore', { interactive: viewMode === '3d', layout: besidePanels });
   useEscapeToClear();
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSearchOpen(false);
+    const onDown = (e: PointerEvent) => !mobileSearchRef.current?.contains(e.target as Node) && setSearchOpen(false);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onDown);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onDown);
+    };
+  }, [searchOpen]);
 
   return (
     <section id="explore" aria-labelledby="explore-title" className="frame">
@@ -100,6 +114,104 @@ export function Explorer() {
           <p id="globe-help" className="sr-only">
             {t('globe.help')}
           </p>
+
+          {/* mobile: stacked magnifying glass search over the top-left of the globe so the satellite image sits right below */}
+          <div ref={mobileSearchRef} className="absolute left-3 right-16 top-3 z-20 flex items-center gap-2 sm:left-5 lg:hidden">
+            <button
+              type="button"
+              className="btn btn-icon shrink-0 rounded-full !bg-graphite-900/90 shadow-panel backdrop-blur-md"
+              aria-expanded={searchOpen}
+              aria-controls="mobile-aoi-panel"
+              aria-label={t('aoi.search_label')}
+              title={t('aoi.search_label')}
+              onClick={() => setSearchOpen((v) => !v)}
+            >
+              <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+            </button>
+            {selected && (
+              <div className="panel flex min-w-0 items-center gap-1.5 rounded-full !bg-graphite-900/90 py-1 pl-3 pr-1.5 text-xs backdrop-blur-md">
+                <span className="truncate font-semibold text-ink" title={aoiName}>
+                  {aoiName}
+                </span>
+                <button
+                  type="button"
+                  className="tap inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-dim hover:bg-graphite-700 hover:text-ink"
+                  onClick={clearAoi}
+                  aria-label={t('aoi.clear')}
+                  title={t('aoi.clear_hint')}
+                >
+                  <span aria-hidden>✕</span>
+                </button>
+              </div>
+            )}
+
+            {searchOpen && (
+              <div
+                id="mobile-aoi-panel"
+                role="dialog"
+                aria-label={t('aoi.title')}
+                className="panel assistant-in absolute left-0 top-full mt-2 w-[min(22rem,calc(100vw-1.5rem))] !bg-graphite-800 p-3.5 shadow-panel"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="eyebrow">{t('nav.explore')}</p>
+                    <p className="mt-0.5 text-base font-semibold text-ink">{t('aoi.title')}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-icon btn-sm"
+                    onClick={() => setSearchOpen(false)}
+                    aria-label={t('header.menu_close')}
+                  >
+                    <span aria-hidden>✕</span>
+                  </button>
+                </div>
+                {!webgl && <p className="mt-2 text-xs text-ink-dim">{t('view.no_webgl')}</p>}
+                <div className="mt-2.5">
+                  <AoiSearch onSelect={() => setSearchOpen(false)} />
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-ink-mute">{t('aoi.or_click')}</p>
+                <div className="mt-3 rounded-xl border border-line bg-graphite-900/60 p-2.5">
+                  <p className="min-w-0 text-xs">
+                    <span className="block text-ink-dim">{t('aoi.current')}</span>
+                    <span className="block truncate font-semibold text-ink" title={aoiName}>
+                      {selected ? aoiName : t('aoi.no_selection')}
+                    </span>
+                  </p>
+                  {!selected && <p className="mt-1 text-xs leading-relaxed text-ink-dim">{t('aoi.world_note')}</p>}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${tool === 'rect' ? 'btn-primary' : ''}`}
+                      aria-pressed={tool === 'rect'}
+                      onClick={() => {
+                        set({ tool: tool === 'rect' ? 'pan' : 'rect' });
+                        setSearchOpen(false);
+                      }}
+                    >
+                      <span aria-hidden>▭</span> {tool === 'rect' ? t('aoi.drawing') : t('aoi.draw')}
+                    </button>
+                    {selected && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={() => {
+                          clearAoi();
+                          setSearchOpen(false);
+                        }}
+                        title={t('aoi.clear_hint')}
+                      >
+                        <span aria-hidden>✕</span> {t('aoi.clear')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* zoom: over the globe; on phones at its lower corner, inside the thumb's easy reach */}
           <div className="absolute right-3 top-[calc(max(60svh,340px)-0.75rem)] z-10 flex -translate-y-full flex-col gap-2 sm:right-5 lg:right-6 lg:top-6 lg:translate-y-0">
@@ -125,10 +237,10 @@ export function Explorer() {
             )}
           </div>
 
-          <div className="pointer-events-none relative z-10 flex flex-col gap-3 px-3 pb-4 pt-3 sm:px-6 lg:absolute lg:inset-0 lg:grid lg:grid-cols-[22.5rem_1fr] lg:grid-rows-[1fr_auto] lg:gap-4 lg:px-6 lg:pb-6 lg:pt-6 xl:pl-24">
-            {/* left column: area + satellite image */}
+          <div className={`pointer-events-none relative z-10 flex flex-col gap-3 px-3 sm:px-6 lg:absolute lg:inset-0 lg:grid lg:grid-cols-[22.5rem_1fr] lg:grid-rows-[1fr_auto] lg:gap-4 lg:px-6 lg:pb-6 lg:pt-6 xl:pl-24 ${selected ? 'pb-4 pt-3' : 'pb-0 pt-0'}`}>
+            {/* left column: area (desktop) + satellite image */}
             <div className="flex min-h-0 flex-col gap-3 lg:col-start-1 lg:row-span-2 lg:overflow-y-auto lg:pb-1 lg:pr-1 [scrollbar-width:thin]">
-              <div className="panel pointer-events-auto p-4">
+              <div className="panel pointer-events-auto hidden p-4 lg:block">
                 <p className="eyebrow">{t('nav.explore')}</p>
                 <h2 id="explore-title" className="mt-1 text-2xl">
                   {t('aoi.title')}

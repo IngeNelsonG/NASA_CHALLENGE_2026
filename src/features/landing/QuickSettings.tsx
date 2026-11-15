@@ -24,12 +24,20 @@ function Toggle({ label, hint, on, onChange }: { label: string; hint: string; on
   );
 }
 
-/** Round accessibility button next to the help button. */
+/** Round accessibility button and back-to-top button next to the help button. */
 export function QuickSettings() {
   const t = useT();
   const { theme, text, contrast, motion, setPrefs, resetA11y } = usePrefs();
   const [open, setOpen] = useState(false);
+  const [showTop, setShowTop] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > 600);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -79,6 +87,21 @@ export function QuickSettings() {
           </button>
         </div>
       )}
+      <button
+        type="button"
+        className={`btn h-11 w-11 rounded-full !bg-graphite-800 !p-0 shadow-panel transition-[opacity,transform] duration-300 ${
+          showTop ? 'opacity-100' : 'pointer-events-none translate-y-2 opacity-0'
+        }`}
+        aria-hidden={!showTop}
+        tabIndex={showTop ? 0 : -1}
+        aria-label={t('nav.top')}
+        title={t('nav.top')}
+        onClick={() => window.scrollTo({ top: 0, behavior: motion ? 'auto' : 'smooth' })}
+      >
+        <svg aria-hidden viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 19V5M5 12l7-7 7 7" />
+        </svg>
+      </button>
       <button
         type="button"
         className="btn h-11 w-11 rounded-full !bg-graphite-800 !p-0 shadow-panel"

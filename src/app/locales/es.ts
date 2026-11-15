@@ -17,6 +17,7 @@ export const es: Record<keyof typeof en, string> = {
   'nav.label': 'Secciones',
   'nav.sections': 'Progreso de la página',
   'nav.skip': 'Saltar al contenido',
+  'nav.top': 'Subir al inicio',
   'nav.hero': 'Inicio',
   'nav.problem': 'Problema',
   'nav.explore': 'Explorar',

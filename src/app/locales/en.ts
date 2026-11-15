@@ -15,6 +15,7 @@ export const en = {
   'nav.label': 'Sections',
   'nav.sections': 'Page progress',
   'nav.skip': 'Skip to content',
+  'nav.top': 'Back to top',
   'nav.hero': 'Start',
   'nav.problem': 'Problem',
   'nav.explore': 'Explore',
