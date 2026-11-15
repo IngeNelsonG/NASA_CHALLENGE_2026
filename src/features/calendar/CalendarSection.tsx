@@ -24,7 +24,7 @@ function Legend({ max }: { max: number }) {
           {t('cal.legend_harmonized')}
         </p>
         <div aria-hidden className="h-2.5 rounded-sm" style={{ background: fireGradientCss }} />
-        <div className="data relative mt-0.5 h-3 text-xs" aria-hidden>
+        <div className="data relative mt-0.5 h-3 whitespace-nowrap text-xs" aria-hidden>
           <span className="absolute left-0">1</span>
           {ticks.map((k) => (
             <span key={k.f} className="absolute -translate-x-full" style={{ left: `${k.f * 100}%` }}>

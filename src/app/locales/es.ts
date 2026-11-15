@@ -300,7 +300,7 @@ export const es: Record<keyof typeof en, string> = {
   'method.d_grid': 'Agregar',
   'method.d_grid_s': 'ceros vs sin obs · FRP',
   'method.d_cal': 'Calibrar',
-  'method.d_cal_s': 'traslape ≥2012-02',
+  'method.d_cal_s': 'traslape · desde 2012-02',
   'method.d_out': 'Calendario armonizado',
   'method.d_out_s1': 'eq-MODIS + IC 90 %',
   'method.d_out_s2': 'climatología + ONI',

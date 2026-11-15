@@ -126,9 +126,9 @@ export function Timeline() {
         aria-valuetext={label}
         onChange={(e) => go(+e.target.value)}
       />
-      <div className="data flex justify-between text-xs text-ink-mute" aria-hidden>
+      <div className="data flex justify-between gap-3 text-xs text-ink-mute" aria-hidden>
         <span>{g === 'day' ? fmtDay(mdl.toDate(mdl.min), lang) : mdl.toDate(mdl.min).slice(0, 4)}</span>
-        <span>{t('time.shown')}</span>
+        <span className="hidden text-center sm:inline">{t('time.shown')}</span>
         <span>{g === 'day' ? fmtDay(mdl.toDate(mdl.max), lang) : mdl.toDate(mdl.max).slice(0, 4)}</span>
       </div>
     </div>

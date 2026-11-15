@@ -62,13 +62,13 @@ function Diagram() {
           </marker>
         </defs>
         {/* sensor lanes */}
-        <rect x="4" y="22" width="190" height="78" rx="10" className={box} stroke={CHART.grid} />
+        <rect x="4" y="22" width="200" height="78" rx="10" className={box} stroke={CHART.grid} />
         <rect x="4" y="22" width="5" height="78" rx="2" fill={SENSOR_COLOR.modis} />
         <text x="22" y="50" className={txt}>MODIS · 1 km</text>
         <text x="22" y="69" className={sub}>Terra 2000– · Aqua 2002–</text>
         <text x="22" y="85" className={sub}>MCD14DL / MCD14ML</text>
 
-        <rect x="4" y="150" width="190" height="78" rx="10" className={box} stroke={CHART.grid} />
+        <rect x="4" y="150" width="200" height="78" rx="10" className={box} stroke={CHART.grid} />
         <rect x="4" y="150" width="5" height="78" rx="2" fill={SENSOR_COLOR.viirs} />
         <text x="22" y="178" className={txt}>VIIRS · 375 m</text>
         <text x="22" y="197" className={sub}>S-NPP 2012– · NOAA-20/21</text>
@@ -81,14 +81,18 @@ function Diagram() {
           return (
             <g key={i}>
               <rect x={x} y="86" width="124" height="78" rx="10" className={box} stroke={CHART.grid} />
-              <text x={x + 62} y="120" textAnchor="middle" className={txt}>{t(keys[i])}</text>
-              <text x={x + 62} y="140" textAnchor="middle" className={sub}>{t(subs[i])}</text>
+              <text x={x + 62} y="114" textAnchor="middle" className={txt}>{t(keys[i])}</text>
+              <text y="134" textAnchor="middle" className={sub}>
+                {t(subs[i]).split(' · ').map((line, j) => (
+                  <tspan key={j} x={x + 62} dy={j ? 16 : 0}>{line}</tspan>
+                ))}
+              </text>
               {i < 2 && <path d={`M${x + 124} 125H${x + 148}`} stroke={CHART.axis} strokeWidth="1.5" markerEnd="url(#arr)" />}
             </g>
           );
         })}
-        <path d="M194 61C218 61 212 110 234 112" fill="none" stroke={CHART.axis} strokeWidth="1.5" markerEnd="url(#arr)" />
-        <path d="M194 189C218 189 212 140 234 138" fill="none" stroke={CHART.axis} strokeWidth="1.5" markerEnd="url(#arr)" />
+        <path d="M204 61C222 61 214 110 234 112" fill="none" stroke={CHART.axis} strokeWidth="1.5" markerEnd="url(#arr)" />
+        <path d="M204 189C222 189 214 140 234 138" fill="none" stroke={CHART.axis} strokeWidth="1.5" markerEnd="url(#arr)" />
         <path d="M660 125H690" stroke={CHART.axis} strokeWidth="1.5" markerEnd="url(#arr)" />
 
         <rect x="692" y="70" width="184" height="110" rx="10" className="fill-graphite-700 stroke-harmonized" strokeWidth="1.5" />

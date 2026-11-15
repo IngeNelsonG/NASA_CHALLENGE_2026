@@ -298,7 +298,7 @@ export const en = {
   'method.d_grid': 'Aggregate',
   'method.d_grid_s': 'zero vs no-obs · FRP',
   'method.d_cal': 'Calibrate',
-  'method.d_cal_s': 'full overlap ≥2012-02',
+  'method.d_cal_s': 'overlap · since 2012-02',
   'method.d_out': 'Harmonized calendar',
   'method.d_out_s1': 'MODIS-eq + 90% CI',
   'method.d_out_s2': 'climatology + ONI',

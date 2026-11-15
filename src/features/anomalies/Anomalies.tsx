@@ -773,7 +773,7 @@ export function Anomalies() {
                         </span>
                       )}
                       {item.authorities[0] && (
-                        <span className="truncate font-sans text-ink-mute">· {item.authorities[0].code}</span>
+                        <span className="basis-full truncate font-sans text-ink-mute">{item.authorities[0].code}</span>
                       )}
                     </div>
                   </button>
