@@ -188,7 +188,7 @@ export default function CalendarSection() {
           </h2>
         </Reveal>
         <Reveal delay={120} className="max-w-xl">
-          <p className="text-sm leading-relaxed text-ink-dim sm:text-[15px]">{t('cal.lead', { aoi: aoiName })}</p>
+          <p className="text-sm leading-relaxed text-ink-dim sm:text-[1.0625rem]">{t('cal.lead', { aoi: aoiName })}</p>
         </Reveal>
       </header>
       <div className="panel p-5 sm:p-6">

@@ -9,6 +9,7 @@ import { Footer } from './Footer';
 import { Header } from './Header';
 import { Hero } from './Hero';
 import { OrbitNav } from './OrbitNav';
+import { QuickSettings } from './QuickSettings';
 import { Team } from './Team';
 
 export default function Landing() {
@@ -31,6 +32,7 @@ export default function Landing() {
       </main>
       <Footer />
       <SatCard />
+      <QuickSettings />
       <Assistant />
     </div>
   );

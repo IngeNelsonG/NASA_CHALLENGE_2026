@@ -28,7 +28,7 @@ export type Granularity = 'day' | 'month' | 'year';
 /** MODIS and VIIRS detections are always shown together; only these context layers can be toggled. */
 export type LayerId = 'density' | 'terminator' | 'orbits' | 'borders';
 export type DateRange = { from: string; to: string };
-export type TimeScale = 1 | 60 | 600;
+export type TimeScale = 1 | 60 | 200 | 600;
 
 /** How many previous areas "undo selection" can step back through. */
 const HISTORY = 10;
@@ -102,8 +102,8 @@ export const useStore = create<State>((set, get) => ({
   date: todayIso(),
   granularity: 'month',
   playing: false,
-  // simulated clock: at 600× a satellite circles the Earth in ~10 s (and the terminator creeps)
-  timeScale: 600,
+  // simulated clock for the satellites: at 200× one circles the Earth in ~30 s
+  timeScale: 200,
   calRange: { from: RECORD_START, to: todayIso() },
   resolution: 'month',
   tool: 'pan',

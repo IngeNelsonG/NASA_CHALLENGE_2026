@@ -159,7 +159,7 @@ export function Explorer() {
                     {selected && (
                       <button type="button" className="btn btn-sm" onClick={clearAoi} title={t('aoi.clear_hint')}>
                         <span aria-hidden>✕</span> {t('aoi.clear')}
-                        <kbd className="data ml-0.5 hidden rounded border border-line px-1 text-[10px] leading-4 text-ink-mute sm:inline">Esc</kbd>
+                        <kbd className="data ml-0.5 hidden rounded border border-line px-1 text-[0.75rem] leading-4 text-ink-mute sm:inline">Esc</kbd>
                       </button>
                     )}
                   </div>

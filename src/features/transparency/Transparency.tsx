@@ -101,7 +101,7 @@ function PlanckWienDiagram() {
               <g key={b.label}>
                 <line x1={x} y1={yLabel + 4} x2={x} y2={h - padY} stroke={b.color} strokeWidth="1.2" strokeDasharray="3 3" opacity="0.85" />
                 <circle cx={x} cy={h - padY} r="3" fill={b.color} />
-                <text x={b.lam < 5 ? x + 6 : x - 6} y={yLabel} textAnchor={b.lam < 5 ? 'start' : 'end'} fill={b.color} className="font-mono text-xs">
+                <text x={b.lam < 5 ? x + 6 : x - 6} y={yLabel} textAnchor={b.lam < 5 ? 'start' : 'end'} fill={b.color} className="font-mono text-[12px]">
                   {b.label}
                 </text>
               </g>
@@ -112,7 +112,7 @@ function PlanckWienDiagram() {
           <path d={firePath} fill="none" stroke={SENSOR_COLOR.modis} strokeWidth="2" />
 
           {[2, 4, 6, 8, 10, 12, 14].map((tick) => (
-            <text key={tick} x={lamToX(tick, w, padX)} y={h - padY + 18} textAnchor="middle" className="fill-ink-mute font-mono text-xs">
+            <text key={tick} x={lamToX(tick, w, padX)} y={h - padY + 18} textAnchor="middle" className="fill-ink-mute font-mono text-[12px]">
               {tick} µm
             </text>
           ))}
@@ -376,7 +376,7 @@ function Fold({ label, count, children }: { label: string; count?: number; child
           ∑
         </span>
         {label}
-        {count != null && <span className="data rounded-full border border-line px-1.5 text-[11px] font-normal leading-4 text-ink-mute">{count}</span>}
+        {count != null && <span className="data rounded-full border border-line px-1.5 text-[0.8125rem] font-normal leading-4 text-ink-mute">{count}</span>}
         <span aria-hidden className="ml-auto text-xs text-ink-mute transition-transform duration-300 group-open/fold:rotate-180">
           ▾
         </span>

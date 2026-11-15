@@ -48,7 +48,7 @@ export function ServerStatus() {
 
   if (state === 'ok') return null;
   return (
-    <div role="status" className="panel fade-in fixed bottom-4 left-4 z-50 flex max-w-[min(22rem,calc(100vw-6.5rem))] items-start gap-3 p-3 text-xs leading-relaxed text-ink sm:bottom-6 sm:left-6">
+    <div role="status" className="panel fade-in fixed bottom-20 left-4 z-50 flex max-w-[min(22rem,calc(100vw-2rem))] items-start gap-3 p-3 text-xs leading-relaxed text-ink sm:bottom-6 sm:left-6">
       {state === 'waking' ? (
         <span aria-hidden className="mt-0.5 h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-cream/30 border-t-cream" />
       ) : (

@@ -44,7 +44,7 @@ export function SatelliteImage() {
 
   return (
     <section aria-labelledby="sat-title" className="panel pointer-events-auto overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-4 pb-2 pt-3.5">
+      <div className="flex flex-col gap-2 px-4 pb-3 pt-3.5">
         <h3 id="sat-title" className="card-title">
           {t('satimg.title')}
         </h3>

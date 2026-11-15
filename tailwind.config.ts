@@ -51,6 +51,17 @@ export default {
         },
         line: 'rgb(var(--line) / calc(<alpha-value> * var(--line-a)))',
       },
+      // Modular type scale, ratio ≈ 1.2 around a 1.1rem body. The small steps are larger than
+      // Tailwind's defaults (12/14/16 px → 14/16/17.6 px): labels and notes were hard to read.
+      fontSize: {
+        xs: ['0.875rem', { lineHeight: '1.25rem' }],
+        sm: ['1rem', { lineHeight: '1.5rem' }],
+        base: ['1.1rem', { lineHeight: '1.7rem' }],
+        lg: ['1.3rem', { lineHeight: '1.85rem' }],
+        xl: ['1.5rem', { lineHeight: '2rem' }],
+        '2xl': ['1.75rem', { lineHeight: '2.2rem' }],
+        '3xl': ['2.1rem', { lineHeight: '2.5rem' }],
+      },
       fontFamily: {
         display: ['"Fraunces Variable"', 'Georgia', 'serif'],
         sans: ['Overpass', 'system-ui', 'sans-serif'],

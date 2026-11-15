@@ -5,15 +5,8 @@ import { reducedMotion } from '@/lib/capabilities';
 import { view } from '@/scenes/view';
 import { useStore } from '@/store';
 
-const SEEN_KEY = 'intro-seen';
-const seen = () => {
-  try {
-    return sessionStorage.getItem(SEEN_KEY) === '1';
-  } catch {
-    return false;
-  }
-};
-export const shouldPlayIntro = () => !seen() && !reducedMotion();
+/** The intro plays on every page load (skipped only when the visitor asks for less motion). */
+export const shouldPlayIntro = () => !reducedMotion();
 
 function sceneReady(timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
@@ -40,11 +33,6 @@ export default function IntroSequence() {
   const [logoMissing, setLogoMissing] = useState(false);
 
   const finish = useCallback(() => {
-    try {
-      sessionStorage.setItem(SEEN_KEY, '1');
-    } catch {
-      /* storage unavailable */
-    }
     gsap.killTweensOf(view.intro);
     view.intro.dolly = 1;
     view.intro.sats = 1;

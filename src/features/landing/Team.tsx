@@ -7,7 +7,7 @@ export const USTA_URL = 'https://santototunja.edu.co/';
 /** As listed on the team's Space Apps page. */
 const MEMBERS: { name: string }[] = [
   { name: 'Nelson Felipe Gonzalez Gordillo' },
-  { name: 'Jean Carlos Reyes' },
+  { name: 'Jean Carlos Reyes Delgadillo' },
   { name: 'Daniel Esteban Alarcón Rojas' },
   { name: 'Edgard Leonardo Patiño Largo' },
 ];
@@ -36,7 +36,7 @@ export function Team() {
                 <p aria-hidden className="font-display text-5xl font-light leading-none text-cream sm:text-6xl">
                   {initials(m.name)}
                 </p>
-                <h3 className="mt-auto pt-6 text-[15px] font-semibold leading-snug text-ink sm:text-base">{m.name}</h3>
+                <h3 className="mt-auto pt-6 text-[1.0625rem] font-semibold leading-snug text-ink sm:text-base">{m.name}</h3>
                 <p className="mt-1.5 text-xs text-ink-dim">Colombia</p>
               </article>
             </Reveal>

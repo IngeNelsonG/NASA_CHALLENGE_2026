@@ -67,7 +67,7 @@ export function Header() {
                 key={id}
                 href={`#${id}`}
                 aria-current={section === id ? 'true' : undefined}
-                className={`py-2 text-[15px] transition-colors duration-300 ${section === id ? 'text-ink' : 'text-ink-dim hover:text-ink'}`}
+                className={`py-2 text-[1.0625rem] transition-colors duration-300 ${section === id ? 'text-ink' : 'text-ink-dim hover:text-ink'}`}
               >
                 <RollText>{t(`nav.${id}`)}</RollText>
               </a>

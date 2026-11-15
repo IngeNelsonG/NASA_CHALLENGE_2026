@@ -125,7 +125,7 @@ src/
 
 - **One WebGL renderer.** Any DOM element can become a "stage" (`useGlobeStage`), so the intro, the hero and the explorer share the same Earth. On desktop the canvas is fixed behind the page and a projection view-offset keeps the globe on the active stage. On touch and narrow screens the canvas is *docked*: moved over the active stage in page coordinates so it scrolls natively (a fixed canvas re-aimed on every scroll frame lags behind the finger), with ambient motion capped at 30 fps.
 - **Earth-fixed frame.** The Earth never rotates; the camera orbits it. Satellites (satellite.js, SGP4 → ECEF) and the sun direction (day/night terminator) are computed in that frame from a simulated UTC clock (×1 / ×60 / ×600).
-- **Rendering on demand.** `frameloop="demand"`; `CameraRig` requests frames only while something moves (satellites orbit on a ×600 simulated clock; the day/night terminator follows the real sun), plus a 4 fps heartbeat. Nothing renders when the tab is hidden or no stage is on screen.
+- **Rendering on demand.** `frameloop="demand"`; `CameraRig` requests frames only while something moves (satellites orbit on a ×200 simulated clock; the day/night terminator follows the real sun), plus a 4 fps heartbeat. Nothing renders when the tab is hidden or no stage is on screen.
 - **Hotspots** are one `Points` draw call with a shader; density hexagons are one `InstancedMesh`.
 - **Worker.** Fetching, parsing, typed-array packing, hex binning and CSV export run in `src/lib/data.worker.ts`.
 - **2D fallback.** Without WebGL2, or on low-memory devices, the app uses the Equal Earth canvas map (`Map2D`).

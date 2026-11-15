@@ -8,6 +8,16 @@
    Cream sections paint themselves on top; the hero and the explorer are rounded "windows" cut
    into the cream that let the dark layers show through.
    --------------------------------------------------------------------------------------------- */
+:root {
+  /* page surface (cream; dark in dark mode) */
+  --paper: 239 229 215;
+  --paper-deep: 226 213 194;
+}
+html[data-theme='dark'] {
+  --paper: 20 18 16;
+  --paper-deep: 36 33 29;
+}
+
 :root,
 .panel,
 .btn,
@@ -32,6 +42,40 @@
   --line-a: 0.14;
   --eyebrow: #171411;
   --focus: #171411;
+}
+/* dark mode: the page surface takes the same ink as the dark windows */
+html[data-theme='dark'] .section {
+  --ink: 239 233 224;
+  --ink-dim: 184 176 164;
+  --ink-mute: 140 132 121;
+  --line: 239 233 224;
+  --line-a: 0.12;
+  --eyebrow: rgb(184 176 164);
+  --focus: #EFE5D7;
+}
+
+/* accessibility panel: high contrast (secondary text as strong as primary, firmer lines) */
+html[data-contrast='high'],
+html[data-contrast='high'] :is(.panel, .btn, .chip, .input, .window),
+html[data-contrast='high'][data-theme='dark'] .section {
+  --ink: 255 255 255;
+  --ink-dim: 240 236 229;
+  --ink-mute: 216 210 200;
+  --line-a: 0.34;
+  --eyebrow: rgb(240 236 229);
+}
+html[data-contrast='high']:not([data-theme='dark']) .section {
+  --ink: 0 0 0;
+  --ink-dim: 23 20 17;
+  --ink-mute: 48 42 36;
+  --line-a: 0.4;
+}
+/* accessibility panel: text size (everything is in rem, so the whole layout scales with it) */
+html[data-text='lg'] {
+  font-size: 112.5%;
+}
+html[data-text='xl'] {
+  font-size: 125%;
 }
 
 @layer base {
@@ -82,7 +126,7 @@
     position: absolute;
     inset: 0 -100vw;
     z-index: -1;
-    background: theme('colors.cream.DEFAULT');
+    background: rgb(var(--paper));
   }
 
   /* a dark window framed by cream: the huge spread shadow is the frame, clipped by the section */
@@ -93,7 +137,7 @@
   .window {
     @apply relative rounded-[18px] lg:rounded-[22px];
     color: rgb(var(--ink));
-    box-shadow: 0 0 0 100vmax theme('colors.cream.DEFAULT');
+    box-shadow: 0 0 0 100vmax rgb(var(--paper));
   }
 
   .panel {
@@ -309,6 +353,21 @@ a:focus-visible > .roll > span:last-child {
     opacity: 1;
     transform: none;
   }
+}
+/* the same, when asked for in the accessibility panel */
+html[data-motion='reduce'] {
+  scroll-behavior: auto;
+}
+html[data-motion='reduce'] *,
+html[data-motion='reduce'] *::before,
+html[data-motion='reduce'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+html[data-motion='reduce'] :is(.reveal, .split-w > span) {
+  opacity: 1;
+  transform: none;
 }
 
 /* ---------------------------------------------------------------------------------------------

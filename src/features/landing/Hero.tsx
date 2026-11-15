@@ -54,7 +54,7 @@ export function Hero() {
           <h1 id="hero-title" className="fade-in mt-3 max-w-2xl text-2xl leading-tight text-cream sm:text-3xl" style={{ animationDelay: '0.65s' }}>
             {t('hero.title')}
           </h1>
-          <p className="fade-in mt-4 max-w-xl text-[15px] leading-relaxed text-ink-dim sm:text-base" style={{ animationDelay: '0.8s' }}>
+          <p className="fade-in mt-4 max-w-xl text-[1.0625rem] leading-relaxed text-ink-dim sm:text-base" style={{ animationDelay: '0.8s' }}>
             {t('hero.lead')}
           </p>
 

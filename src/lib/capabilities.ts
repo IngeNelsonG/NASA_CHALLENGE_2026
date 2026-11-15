@@ -1,5 +1,8 @@
 export const isMobile = () => typeof matchMedia !== 'undefined' && matchMedia('(max-width: 768px)').matches;
-export const reducedMotion = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+/** The system setting, or the "reduce motion" switch of the accessibility panel. */
+export const reducedMotion = () =>
+  (typeof document !== 'undefined' && document.documentElement.dataset.motion === 'reduce') ||
+  (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
 /** WebGL2 present and the device is not obviously low-end; otherwise the app uses the 2D map. */
 export function canUse3D(): boolean {

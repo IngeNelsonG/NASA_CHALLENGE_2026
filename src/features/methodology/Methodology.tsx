@@ -17,7 +17,8 @@ function Diagram() {
   const t = useT();
   const box = 'fill-graphite-800';
   const txt = 'fill-ink text-[13px] font-semibold';
-  const sub = 'fill-ink-dim font-mono text-xs';
+  // px, not rem: the SVG scales with its viewBox, so its labels must not grow with the type scale
+  const sub = 'fill-ink-dim font-mono text-[12px]';
   const stages: { title: Key; sub: Key }[] = [
     { title: 'method.d_qc', sub: 'method.d_qc_s' },
     { title: 'method.d_grid', sub: 'method.d_grid_s' },
@@ -125,7 +126,7 @@ export function Methodology() {
                 {s.n}
               </span>
               <h3 className="text-xl font-semibold leading-snug text-ink sm:col-start-2 lg:col-start-auto lg:text-2xl">{t(s.title)}</h3>
-              <p className="max-w-2xl text-[15px] leading-relaxed text-ink-dim sm:col-start-2 lg:col-start-auto">{t(s.body)}</p>
+              <p className="max-w-2xl text-[1.0625rem] leading-relaxed text-ink-dim sm:col-start-2 lg:col-start-auto">{t(s.body)}</p>
             </Reveal>
           </li>
         ))}
@@ -136,7 +137,7 @@ export function Methodology() {
         <article className="panel grid grid-cols-1 gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:gap-12 lg:p-10">
           <div className="min-w-0 max-w-3xl">
             <h3 className="font-display text-3xl font-light leading-tight text-cream sm:text-4xl">{t('method.unc_title')}</h3>
-            <p className="mt-4 text-[15px] leading-relaxed text-ink-dim">{t('method.unc_body')}</p>
+            <p className="mt-4 text-[1.0625rem] leading-relaxed text-ink-dim">{t('method.unc_body')}</p>
           </div>
           <a href="#transparency-method" className="btn shrink-0 self-start lg:self-end">
             <span aria-hidden className="font-display text-base">∑</span>
@@ -156,7 +157,7 @@ export function Methodology() {
           {LIMITS.map((k, i) => (
             <li key={k}>
               <Reveal delay={(i % 3) * 80} className="h-full">
-                <div className="h-full rounded-2xl border border-line bg-cream-deep/60 p-5 transition-colors duration-300 hover:bg-cream-deep">
+                <div className="h-full rounded-2xl border border-line bg-[rgb(var(--paper-deep)/0.6)] p-5 transition-colors duration-300 hover:bg-[rgb(var(--paper-deep))]">
                   <span className="data inline-flex items-center gap-1.5 text-xs font-semibold text-ink">
                     <i aria-hidden className="h-1.5 w-1.5 rounded-full bg-accent" />L{i + 1}
                   </span>

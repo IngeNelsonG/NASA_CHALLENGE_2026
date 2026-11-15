@@ -151,7 +151,7 @@ export function Assistant() {
               {t('assistant.send')}
             </button>
           </form>
-          <p className="px-4 pb-3 text-[11px] leading-snug text-ink-mute">{t('assistant.disclaimer')}</p>
+          <p className="px-4 pb-3 text-[0.8125rem] leading-snug text-ink-mute">{t('assistant.disclaimer')}</p>
         </div>
       )}
 
@@ -162,12 +162,11 @@ export function Assistant() {
         aria-controls="assistant-panel"
         aria-label={open ? t('assistant.close') : t('assistant.open')}
         onClick={() => (open ? close() : setOpen(true))}
-        className="btn btn-primary fixed bottom-4 right-4 z-50 h-14 min-w-14 rounded-full !px-4 shadow-panel sm:bottom-6 sm:right-6"
+        className="btn btn-primary fixed bottom-4 right-4 z-50 h-14 w-14 rounded-full !p-0 shadow-panel sm:bottom-6 sm:right-6"
       >
         <span aria-hidden className="text-lg leading-none">
           {open ? '✕' : '?'}
         </span>
-        {!open && <span className="hidden sm:inline">{t('assistant.fab')}</span>}
       </button>
     </>
   );
