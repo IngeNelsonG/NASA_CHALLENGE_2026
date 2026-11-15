@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useT } from '@/app/i18n';
+import { METHOD_PATH, sectionHref, useIsMethodPage } from '@/app/route';
 import { RollText, Sparkle } from '@/components/ui';
 import { APP_NAME, USE_MOCKS } from '@/lib/env';
 import { useStore } from '@/store';
@@ -23,6 +24,10 @@ export function Header() {
   const dark = theme === 'dark';
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const onMethod = useIsMethodPage();
+  // "Method" opens its own page; every other link is a landing section
+  const hrefOf = (id: string) => (id === 'method' ? METHOD_PATH : sectionHref(id, onMethod));
+  const isCurrent = (id: string) => (onMethod ? id === 'method' : section === id && id !== 'method');
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 120);
@@ -54,7 +59,7 @@ export function Header() {
         }`}
       >
         <div className="flex h-14 items-center gap-3 px-4 lg:gap-5 lg:px-6">
-          <a href="#hero" onClick={() => setOpen(false)} className="tap flex items-center gap-2 whitespace-nowrap font-display text-lg tracking-wide text-ink">
+          <a href={onMethod ? '/' : '#hero'} onClick={() => setOpen(false)} className="tap flex items-center gap-2 whitespace-nowrap font-display text-lg tracking-wide text-ink">
             <Sparkle className="h-3.5 w-3.5 text-accent" />
             {APP_NAME}
           </a>
@@ -68,9 +73,9 @@ export function Header() {
             {LINKS.map((id) => (
               <a
                 key={id}
-                href={`#${id}`}
-                aria-current={section === id ? 'true' : undefined}
-                className={`py-2 text-[1.0625rem] transition-colors duration-300 ${section === id ? 'text-ink' : 'text-ink-dim hover:text-ink'}`}
+                href={hrefOf(id)}
+                aria-current={isCurrent(id) ? (onMethod ? 'page' : 'true') : undefined}
+                className={`py-2 text-[1.0625rem] transition-colors duration-300 ${isCurrent(id) ? 'text-ink' : 'text-ink-dim hover:text-ink'}`}
               >
                 <RollText>{t(`nav.${id}`)}</RollText>
               </a>
@@ -105,7 +110,7 @@ export function Header() {
             >
               {lang === 'en' ? 'ES' : 'EN'}
             </button>
-            <a href="#explore" className="btn btn-primary btn-sm hidden !px-5 xl:inline-flex">
+            <a href={sectionHref('explore', onMethod)} className="btn btn-primary btn-sm hidden !px-5 xl:inline-flex">
               <RollText>{t('hero.cta')}</RollText>
               <span aria-hidden className="btn-plus">+</span>
             </a>
@@ -154,9 +159,9 @@ export function Header() {
               {LINKS.map((id, i) => (
                 <li key={id} style={{ animationDelay: `${60 + i * 45}ms` }} className="border-b border-line">
                   <a
-                    href={`#${id}`}
+                    href={hrefOf(id)}
                     onClick={() => setOpen(false)}
-                    aria-current={section === id ? 'true' : undefined}
+                    aria-current={isCurrent(id) ? (onMethod ? 'page' : 'true') : undefined}
                     className="flex items-baseline justify-between py-3.5 font-display text-3xl text-ink"
                   >
                     {t(`nav.${id}`)}

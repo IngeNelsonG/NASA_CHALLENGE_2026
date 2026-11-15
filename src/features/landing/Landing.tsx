@@ -3,8 +3,7 @@ import { Anomalies } from '@/features/anomalies/Anomalies';
 import { CalendarBlock, Explorer } from '@/features/explorer/Explorer';
 import { SatCard } from '@/features/explorer/Floating';
 import { Assistant } from '@/features/assistant/Assistant';
-import { Methodology } from '@/features/methodology/Methodology';
-import { Transparency } from '@/features/transparency/Transparency';
+import { MethodTeaser } from '@/features/methodology/MethodTeaser';
 import { Footer } from './Footer';
 import { Header } from './Header';
 import { Hero } from './Hero';
@@ -26,8 +25,7 @@ export default function Landing() {
         <Explorer />
         <CalendarBlock />
         <Anomalies />
-        <Methodology />
-        <Transparency />
+        <MethodTeaser />
         <Team />
       </main>
       <Footer />

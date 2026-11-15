@@ -62,7 +62,9 @@ distance from normal is shown in σ, standard deviations). It includes an alert 
 countries and Colombian departments with the authorities to notify, and an El Niño / La Niña \
 panel (ONI index: El Niño at +0.5 °C or more, La Niña at −0.5 °C or less). El Niño usually \
 means less rain in Colombia; it is context, never a proven cause of a fire.
-- Método / Method: 1) NASA FIRMS standard products for MODIS (Terra/Aqua) and VIIRS 375 m \
+- Metodología / Methodology (its own page, /metodologia, opened from the "Ver metodología y \
+fórmulas" button on the main page or the Metodología menu link; it holds Método and \
+Transparencia): 1) NASA FIRMS standard products for MODIS (Terra/Aqua) and VIIRS 375 m \
 (S-NPP, NOAA-20, NOAA-21); 2) only vegetation fires, without volcanoes, gas flares, industry \
 or low confidence; 3) daily and monthly counts plus mean fire radiative power (FRP, MW); 4) \
 cross-calibration: the VIIRS/MODIS ratio k is measured on months where both exist (from \

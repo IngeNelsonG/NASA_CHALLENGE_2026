@@ -11,7 +11,10 @@
       "excludeFiles": "{node_modules/**,dist/**,public/**,src/**,scripts/**,backend/tests/**,backend/scripts/**,backend/.venv/**,**/__pycache__/**,.vercel_python_packages/**,_uv/**}"
     }
   },
-  "rewrites": [{ "source": "/api/:path*", "destination": "/api/index?__path=:path*" }],
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index?__path=:path*" },
+    { "source": "/metodologia", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/assets/(.*)",
