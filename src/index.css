@@ -73,7 +73,7 @@
 @layer components {
   /* cream section; the ::before bleeds the colour to the viewport edges */
   .section {
-    @apply relative mx-auto w-full max-w-[1280px] px-4 py-16 sm:px-6 lg:py-24 xl:pl-24;
+    @apply relative mx-auto w-full max-w-[1280px] px-4 py-16 sm:px-6 md:pl-20 lg:py-24 lg:pl-24;
     color: rgb(var(--ink));
     isolation: isolate;
   }

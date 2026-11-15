@@ -29,6 +29,7 @@ class AlertItem(BaseModel):
     region_name: str
     department: str | None = None
     country: str | None = None
+    bbox: tuple[float, float, float, float] | None = None
     severity: AlertSeverity
     severity_rank: int  # CRITICAL=3, WARNING=2, WATCH=1, NORMAL=0
     severity_label_es: str
@@ -47,8 +48,11 @@ class AlertItem(BaseModel):
     unseasonal: bool
     oni_value: float | None = None
     enso_phase: EnsoPhase
+    enso_relevant: bool = True
     nrt_detections: int | None = None
     nrt_percent_of_normal: float | None = None
+    active_subalerts_count: int = 0
+    max_subalert_severity: AlertSeverity | None = None
     headline_es: str
     headline_en: str
     technical_summary_es: str

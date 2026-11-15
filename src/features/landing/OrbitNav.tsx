@@ -9,7 +9,7 @@ gsap.registerPlugin(ScrollTrigger, MotionPathPlugin);
 
 /** In page order; the header menu, the footer and this rail all read it. */
 export const SECTIONS = ['hero', 'explore', 'calendar', 'anomalies', 'method', 'transparency', 'team', 'data'] as const;
-const W = 76, H = 520;
+const W = 64, H = 420;
 
 function SatIcon({ color }: { color: string }) {
   return (
@@ -90,10 +90,10 @@ export function OrbitNav() {
   }, []);
 
   return (
-    <nav aria-label={t('nav.sections')} className="fixed left-2 top-1/2 z-30 hidden -translate-y-1/2 mix-blend-difference xl:block [@media(max-height:640px)]:!hidden" style={{ width: W, height: H }}>
-      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden className="absolute inset-0 overflow-visible">
-        <path ref={pathA} d={`M 14 10 Q 82 ${H / 2} 14 ${H - 10}`} fill="none" stroke="rgba(235,235,235,0.5)" strokeWidth={1} />
-        <path ref={pathB} d={`M 26 2 Q 104 ${H / 2} 26 ${H - 2}`} fill="none" stroke="rgba(235,235,235,0.25)" strokeWidth={1} strokeDasharray="2 5" />
+    <nav aria-label={t('nav.sections')} className="fixed left-2 top-1/2 z-40 hidden -translate-y-1/2 mix-blend-difference md:block sm:left-3" style={{ width: W, height: 'min(420px, calc(100svh - 7.5rem))' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden className="absolute inset-0 h-full w-full overflow-visible">
+        <path ref={pathA} d={`M 16 18 Q 58 ${H / 2} 16 ${H - 18}`} fill="none" stroke="rgba(235,235,235,0.5)" strokeWidth={1} />
+        <path ref={pathB} d={`M 26 10 Q 74 ${H / 2} 26 ${H - 10}`} fill="none" stroke="rgba(235,235,235,0.25)" strokeWidth={1} strokeDasharray="2 5" />
         <g ref={satB}>
           <SatIcon color="#cfcfcf" />
         </g>
@@ -106,7 +106,7 @@ export function OrbitNav() {
           const id = SECTIONS[i];
           const on = section === id;
           return (
-            <li key={id} className="group absolute" style={{ left: d.x, top: d.y }}>
+            <li key={id} className="group absolute" style={{ left: `${(d.x / W) * 100}%`, top: `${(d.y / H) * 100}%` }}>
               <a
                 href={`#${id}`}
                 aria-current={on ? 'true' : undefined}

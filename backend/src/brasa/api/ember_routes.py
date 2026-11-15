@@ -28,7 +28,21 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from brasa.alerts.detector import ENSO_THRESHOLD, _enso_phase, _fmt_es, evaluate_rows
+from brasa.alerts.detector import (
+    ENSO_THRESHOLD,
+    _enso_phase,
+    _fmt_es,
+    evaluate_rows,
+    is_enso_relevant,
+)
+from brasa.alerts.newsletter import (
+    SmtpConfig,
+    SmtpStatusResponse,
+    SubscriptionRequest,
+    SubscriptionResponse,
+    count_subscribers,
+    subscribe_and_notify,
+)
 from brasa.alerts.schemas import AlertItem
 from brasa.api.assistant import Assistant, read_reply, system_prompt
 from brasa.api.hotspot_sources import (
@@ -753,6 +767,7 @@ class _EmberContext:
     parquet_path: Path
     export_path: Path | None
     has_parquet: bool
+    data_dir: Path = Path("data")
     oni_table: OniTable = field(default_factory=dict)
     firms: FirmsHotspots | None = None
     department_collection: dict[str, Any] | None = None
@@ -809,29 +824,41 @@ def _monthly_frame_for_country_aoi(
     entry: AoiEntry,
     countries: CountryCalendars,
     fallback_ratio: SensorRatio,
+    *,
+    country_ratio: SensorRatio | None = None,
 ) -> tuple[pd.DataFrame, SensorRatio]:
     if entry.kind == "world":
         return _world_monthly_frame(countries, fallback_ratio)
-    if entry.country is None:
-        return pd.DataFrame(columns=["month", "sensor", "count"]), fallback_ratio
-    c_df = countries.monthly[countries.monthly["country"] == entry.country]
+    empty = pd.DataFrame(columns=["month", "sensor", "count"])
     fallback = countries.fallback_ratio or fallback_ratio
-    if c_df.empty:
-        return pd.DataFrame(columns=["month", "sensor", "count"]), fallback
-    try:
-        ratio = fit_sensor_ratio(c_df)
-    except InsufficientOverlapError:
-        ratio = fallback
+    if entry.country is None:
+        return empty, fallback_ratio
+    if country_ratio is not None:
+        ratio = country_ratio
+    else:
+        c_df = countries.monthly[countries.monthly["country"] == entry.country]
+        if c_df.empty:
+            return empty, fallback
+        try:
+            ratio = fit_sensor_ratio(c_df)
+        except InsufficientOverlapError:
+            ratio = fallback
+        if entry.kind == "country":
+            return c_df[["month", "sensor", "count"]], ratio
     if entry.kind == "country":
-        return c_df[["month", "sensor", "count"]], ratio
+        c_df = countries.monthly[countries.monthly["country"] == entry.country]
+        frame = empty if c_df.empty else c_df[["month", "sensor", "count"]]
+        return frame, ratio
     sub_df = countries.subdivisions[
         (countries.subdivisions["country"] == entry.country)
         & (countries.subdivisions["subdivision"].isin(entry.subdivisions))
     ]
-    if sub_df.empty:
-        return pd.DataFrame(columns=["month", "sensor", "count"]), ratio
-    grouped = sub_df.groupby(["month", "sensor"], observed=True)["count"].sum().reset_index()
-    return grouped, ratio
+    frame = (
+        empty
+        if sub_df.empty
+        else sub_df.groupby(["month", "sensor"], observed=True)["count"].sum().reset_index()
+    )
+    return frame, ratio
 
 
 def _world_monthly_frame(
@@ -1315,7 +1342,10 @@ def _compose_analyst_reply(
 
 
 def _rows_for_entry(
-    ctx: _EmberContext, entry: AoiEntry
+    ctx: _EmberContext,
+    entry: AoiEntry,
+    *,
+    country_ratio: SensorRatio | None = None,
 ) -> tuple[list[dict[str, Any]], SensorRatio, bool]:
     if entry.kind == "colombia_all":
         rows, ratio = ctx.service.calendar_and_ratio_for(COLOMBIA, None)
@@ -1328,7 +1358,10 @@ def _rows_for_entry(
         return rows, ratio, _overlaps_colombia(entry.bbox)
 
     monthly_df, ratio = _monthly_frame_for_country_aoi(
-        entry, ctx.countries, ctx.service.sensor_ratio
+        entry,
+        ctx.countries,
+        ctx.service.sensor_ratio,
+        country_ratio=country_ratio,
     )
     if monthly_df.empty:
         return [], ratio, False
@@ -1613,8 +1646,9 @@ def _evaluate_entry_alert(
     *,
     as_of: date | None = None,
     latest_recent: Any = None,
+    country_ratio: SensorRatio | None = None,
 ) -> AlertItem:
-    rows, _, in_col = _rows_for_entry(ctx, entry)
+    rows, _, in_col = _rows_for_entry(ctx, entry, country_ratio=country_ratio)
     nrt_det: int | None = None
     nrt_pct: float | None = None
     if latest_recent is not None and in_col:
@@ -1633,11 +1667,92 @@ def _evaluate_entry_alert(
         as_of=as_of,
         nrt_detections=nrt_det,
         nrt_percent_of_normal=nrt_pct,
+        bbox=entry.bbox,
     )
 
 
 def _alert_sort_key(item: AlertItem) -> tuple[int, float, float, str]:
     return (-item.severity_rank, -item.z_score, -item.anomaly_ratio, item.region_name)
+
+
+def _resolve_country_name(ctx: _EmberContext, query: str) -> str | None:
+    entry = _resolve_aoi_id(query, ctx.aoi_by_id)
+    if entry is not None and entry.country:
+        return entry.country
+    q_norm = _norm_text(query)
+    for item in ctx.aoi_ordered:
+        if item.country and _norm_text(item.country) == q_norm:
+            return item.country
+    return None
+
+
+def _evaluate_country_subdivisions(
+    ctx: _EmberContext,
+    country_query: str,
+    *,
+    as_of: date | None = None,
+) -> list[AlertItem]:
+    target = _resolve_country_name(ctx, country_query)
+    if target is None:
+        return []
+    if target == "Colombia":
+        latest_recent = ctx.recent_src.get() if ctx.recent_src is not None else None
+        col_items = [
+            _evaluate_entry_alert(ctx, e, as_of=as_of, latest_recent=latest_recent)
+            for e in ctx.aoi_ordered
+            if e.kind == "department"
+        ]
+        col_items.sort(key=_alert_sort_key)
+        return col_items
+
+    fallback = ctx.countries.fallback_ratio or ctx.service.sensor_ratio
+    c_df = ctx.countries.monthly[ctx.countries.monthly["country"] == target]
+    if c_df.empty:
+        return []
+    try:
+        country_ratio = fit_sensor_ratio(c_df)
+    except InsufficientOverlapError:
+        country_ratio = fallback
+
+    by_sub: dict[str, AoiEntry] = {}
+    for e in ctx.aoi_ordered:
+        if e.country == target and e.kind == "subdivision" and len(e.subdivisions) == 1:
+            sub_name = e.subdivisions[0]
+            if sub_name not in by_sub:
+                by_sub[sub_name] = e
+
+    sub_df = ctx.countries.subdivisions[ctx.countries.subdivisions["country"] == target]
+    if sub_df.empty:
+        return []
+
+    items: list[AlertItem] = []
+    for raw_sub, grp in sub_df.groupby("subdivision", observed=True):
+        s_str = str(raw_sub)
+        entry = by_sub.get(s_str)
+        aoi_id = entry.id if entry is not None else f"sub:{_slug(target)}:{_slug(s_str)}"
+        bbox = entry.bbox if entry is not None else None
+        grouped = grp.groupby(["month", "sensor"], observed=True)["count"].sum().reset_index()
+        cal = _calendar(
+            grouped,
+            country_ratio,
+            start_month=ctx.countries.record_start,
+            end_month=ctx.countries.record_end,
+        )
+        rows = _rows(cal, ctx.countries.oni)
+        items.append(
+            evaluate_rows(
+                rows,
+                aoi_id=aoi_id,
+                region_name=entry.name if entry is not None else f"{s_str}, {target}",
+                department=s_str,
+                country=target,
+                in_colombia=False,
+                as_of=as_of,
+                bbox=bbox,
+            )
+        )
+    items.sort(key=_alert_sort_key)
+    return items
 
 
 def _build_alerts_overview(
@@ -1667,8 +1782,31 @@ def _build_alerts_overview(
                 _evaluate_entry_alert(ctx, entry, as_of=as_of, latest_recent=latest_recent)
             )
 
-    country_items.sort(key=_alert_sort_key)
     colombia_items.sort(key=_alert_sort_key)
+    active_col = [d for d in colombia_items if d.severity != "NORMAL"]
+    for idx, item in enumerate(country_items):
+        if item.country == "Colombia" and active_col:
+            country_items[idx] = item.model_copy(
+                update={
+                    "active_subalerts_count": len(active_col),
+                    "max_subalert_severity": active_col[0].severity,
+                }
+            )
+            break
+
+    country_items.sort(
+        key=lambda item: (
+            -(
+                item.severity_rank
+                if item.severity != "NORMAL"
+                else (1 if item.active_subalerts_count > 0 else 0)
+            ),
+            -item.active_subalerts_count,
+            -item.z_score,
+            -item.anomaly_ratio,
+            item.region_name,
+        )
+    )
     return AlertsOverviewResponse(countries=country_items, colombia=colombia_items)
 
 
@@ -1794,10 +1932,14 @@ def _detect_enso_episodes(
 
 
 def _compute_enso_payload(
-    oni_table: OniTable, cells: Sequence[Mapping[str, Any]]
+    oni_table: OniTable,
+    cells: Sequence[Mapping[str, Any]],
+    *,
+    relevant: bool = True,
 ) -> dict[str, Any]:
     if not oni_table:
         return {
+            "relevant": relevant,
             "current": {"month": None, "oni": None, "phase": "UNKNOWN", "strength": None},
             "series": [],
             "episodes": [],
@@ -1837,6 +1979,7 @@ def _compute_enso_payload(
     latest_entry = series[-1]
     cur_oni = latest_entry["oni"]
     return {
+        "relevant": relevant,
         "current": {
             "month": latest_entry["month"],
             "oni": cur_oni,
@@ -1854,63 +1997,34 @@ def _compute_enso_payload(
     }
 
 
-def _register_intel_routes(
+def _register_newsletter_routes(
+    app: FastAPI,
+    ctx: _EmberContext,
+    cached_alert: Any,
+) -> None:
+    @app.get("/api/alerts/smtp-status", response_model=SmtpStatusResponse)
+    def api_alerts_smtp_status() -> SmtpStatusResponse:
+        cfg = SmtpConfig.from_env()
+        return SmtpStatusResponse(
+            configured=cfg.configured,
+            host=cfg.host if cfg.configured else None,
+            port=cfg.port,
+            from_email=cfg.from_email,
+            subscribers_count=count_subscribers(ctx.data_dir),
+        )
+
+    @app.post("/api/alerts/subscribe", response_model=SubscriptionResponse)
+    def api_alerts_subscribe(req: SubscriptionRequest) -> SubscriptionResponse:
+        entry = _resolve_aoi_id(req.aoi_id, ctx.aoi_by_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail=f"Unknown AOI: {req.aoi_id}")
+        alert = cached_alert(entry.id, None, _recent_stamp(ctx))
+        return subscribe_and_notify(ctx.data_dir, req, alert)
+
+
+def _register_analyst_route(
     app: FastAPI, ctx: _EmberContext, build_cal: Any, assistant: Assistant | None = None
 ) -> None:
-    @lru_cache(maxsize=4)
-    def _cached_overview(
-        as_of_key: date | None, recent_stamp: str | None
-    ) -> AlertsOverviewResponse:
-        _ = recent_stamp
-        return _build_alerts_overview(ctx, as_of=as_of_key)
-
-    @lru_cache(maxsize=128)
-    def _cached_alert(entry_id: str, as_of_key: date | None, recent_stamp: str | None) -> AlertItem:
-        _ = recent_stamp
-        entry = _resolve_aoi_id(entry_id, ctx.aoi_by_id)
-        if entry is None:  # pragma: no cover - validated before cache lookup
-            raise HTTPException(status_code=404, detail=f"Unknown AOI: {entry_id}")
-        latest = ctx.recent_src.get() if ctx.recent_src is not None else None
-        return _evaluate_entry_alert(ctx, entry, as_of=as_of_key, latest_recent=latest)
-
-    @lru_cache(maxsize=64)
-    def _cached_enso(entry_id: str, recent_stamp: str | None) -> dict[str, Any]:
-        _ = recent_stamp
-        cal = build_cal(entry_id, "2000-01-01", date.today().isoformat(), "month", recent_stamp)
-        return _compute_enso_payload(ctx.oni_table, cal["cells"])
-
-    @app.get("/api/anomalies")
-    def api_anomalies(aoi: str = Query(max_length=120)) -> list[dict[str, Any]]:
-        cal = build_cal(aoi, "2000-01-01", date.today().isoformat(), "month", _recent_stamp(ctx))
-        return _detect_anomalies_from_cells(cal["cells"])
-
-    @app.get("/api/enso")
-    def api_enso(aoi: str = Query(max_length=120)) -> dict[str, Any]:
-        entry = _resolve_aoi_id(aoi, ctx.aoi_by_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail=f"Unknown AOI: {aoi}")
-        return _cached_enso(entry.id, _recent_stamp(ctx))
-
-    @app.get("/api/alerts/overview", response_model=AlertsOverviewResponse)
-    def api_alerts_overview(
-        as_of: Annotated[date | None, Query()] = None,
-    ) -> AlertsOverviewResponse:
-        return _cached_overview(as_of, _recent_stamp(ctx))
-
-    @app.get("/api/alerts", response_model=AlertItem)
-    def api_alerts(
-        aoi: str = Query(max_length=120),
-        as_of: Annotated[date | None, Query()] = None,
-    ) -> AlertItem:
-        entry = _resolve_aoi_id(aoi, ctx.aoi_by_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail=f"Unknown AOI: {aoi}")
-        return _cached_alert(entry.id, as_of, _recent_stamp(ctx))
-
-    @app.get("/api/satellites/tle")
-    def api_satellites_tle() -> list[dict[str, Any]]:
-        return FIRE_SATELLITES_TLE
-
     @app.post("/api/analyst")
     def api_analyst(req: AnalystRequest) -> StreamingResponse:
         entry = _resolve_aoi_id(req.aoi_id, ctx.aoi_by_id)
@@ -1927,6 +2041,7 @@ def _register_intel_routes(
             department=entry.department,
             country=entry.country,
             in_colombia=in_col,
+            bbox=entry.bbox,
         )
         anomalies = _detect_anomalies_from_cells(cal["cells"])
         text, highlights = _compose_analyst_reply(
@@ -1958,6 +2073,96 @@ def _register_intel_routes(
             yield f"data: {json.dumps({'highlights': highlights})}\n\n"
 
         return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
+def _register_intel_routes(
+    app: FastAPI, ctx: _EmberContext, build_cal: Any, assistant: Assistant | None = None
+) -> None:
+    @lru_cache(maxsize=4)
+    def _cached_overview(
+        as_of_key: date | None, recent_stamp: str | None
+    ) -> AlertsOverviewResponse:
+        _ = recent_stamp
+        return _build_alerts_overview(ctx, as_of=as_of_key)
+
+    @lru_cache(maxsize=64)
+    def _cached_regions(
+        country_key: str, as_of_key: date | None, recent_stamp: str | None
+    ) -> list[AlertItem]:
+        _ = recent_stamp
+        return _evaluate_country_subdivisions(ctx, country_key, as_of=as_of_key)
+
+    @lru_cache(maxsize=128)
+    def _cached_alert(entry_id: str, as_of_key: date | None, recent_stamp: str | None) -> AlertItem:
+        _ = recent_stamp
+        entry = _resolve_aoi_id(entry_id, ctx.aoi_by_id)
+        if entry is None:  # pragma: no cover - validated before cache lookup
+            raise HTTPException(status_code=404, detail=f"Unknown AOI: {entry_id}")
+        latest = ctx.recent_src.get() if ctx.recent_src is not None else None
+        return _evaluate_entry_alert(ctx, entry, as_of=as_of_key, latest_recent=latest)
+
+    @lru_cache(maxsize=64)
+    def _cached_enso(entry_id: str, recent_stamp: str | None) -> dict[str, Any]:
+        _ = recent_stamp
+        entry = _resolve_aoi_id(entry_id, ctx.aoi_by_id)
+        rel = (
+            is_enso_relevant(
+                country=entry.country,
+                in_colombia=entry.kind in {"colombia_all", "colombia_box", "department"},
+                bbox=entry.bbox,
+            )
+            if entry is not None
+            else True
+        )
+        cal = build_cal(entry_id, "2000-01-01", date.today().isoformat(), "month", recent_stamp)
+        return _compute_enso_payload(ctx.oni_table, cal["cells"], relevant=rel)
+
+    @app.get("/api/anomalies")
+    def api_anomalies(aoi: str = Query(max_length=120)) -> list[dict[str, Any]]:
+        cal = build_cal(aoi, "2000-01-01", date.today().isoformat(), "month", _recent_stamp(ctx))
+        return _detect_anomalies_from_cells(cal["cells"])
+
+    @app.get("/api/enso")
+    def api_enso(aoi: str = Query(max_length=120)) -> dict[str, Any]:
+        entry = _resolve_aoi_id(aoi, ctx.aoi_by_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail=f"Unknown AOI: {aoi}")
+        return _cached_enso(entry.id, _recent_stamp(ctx))
+
+    @app.get("/api/alerts/overview", response_model=AlertsOverviewResponse)
+    def api_alerts_overview(
+        as_of: Annotated[date | None, Query()] = None,
+    ) -> AlertsOverviewResponse:
+        return _cached_overview(as_of, _recent_stamp(ctx))
+
+    @app.get("/api/alerts/regions", response_model=list[AlertItem])
+    def api_alerts_regions(
+        country: str = Query(max_length=120),
+        active_only: bool = Query(default=False),
+        as_of: Annotated[date | None, Query()] = None,
+    ) -> list[AlertItem]:
+        items = _cached_regions(country, as_of, _recent_stamp(ctx))
+        if active_only:
+            return [item for item in items if item.severity != "NORMAL"]
+        return items
+
+    _register_newsletter_routes(app, ctx, _cached_alert)
+
+    @app.get("/api/alerts", response_model=AlertItem)
+    def api_alerts(
+        aoi: str = Query(max_length=120),
+        as_of: Annotated[date | None, Query()] = None,
+    ) -> AlertItem:
+        entry = _resolve_aoi_id(aoi, ctx.aoi_by_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail=f"Unknown AOI: {aoi}")
+        return _cached_alert(entry.id, as_of, _recent_stamp(ctx))
+
+    @app.get("/api/satellites/tle")
+    def api_satellites_tle() -> list[dict[str, Any]]:
+        return FIRE_SATELLITES_TLE
+
+    _register_analyst_route(app, ctx, build_cal, assistant)
 
 
 def register_ember_routes(
@@ -1993,6 +2198,7 @@ def register_ember_routes(
         parquet_path=parquet_path,
         export_path=export_path,
         has_parquet=parquet_path.exists(),
+        data_dir=data_dir,
         oni_table=oni_table,
         firms=firms,
         department_collection=department_collection,
