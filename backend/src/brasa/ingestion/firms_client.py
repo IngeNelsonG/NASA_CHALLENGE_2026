@@ -43,6 +43,10 @@ class FirmsConfigurationError(RuntimeError):
     """Required configuration is missing (e.g. MAP_KEY)."""
 
 
+class FirmsAuthError(httpx.HTTPStatusError):
+    """FIRMS rejected the configured MAP_KEY (e.g. HTTP 400/401/403 'Invalid MAP_KEY.')."""
+
+
 class FirmsClient:
     def __init__(
         self,
@@ -50,9 +54,10 @@ class FirmsClient:
         base_url: str = "https://firms.modaps.eosdis.nasa.gov",
         http_client: httpx.Client | None = None,
     ) -> None:
-        if map_key is None or not map_key.get_secret_value():
+        raw_key = map_key.get_secret_value().strip() if map_key is not None else ""
+        if not raw_key:
             raise FirmsConfigurationError("BRASA_FIRMS_MAP_KEY is not configured.")
-        self._map_key = map_key
+        self._map_key = SecretStr(raw_key)
         self._base_url = base_url.rstrip("/")
         self._http = http_client or httpx.Client(timeout=REQUEST_TIMEOUT_SECONDS)
 
@@ -65,14 +70,26 @@ class FirmsClient:
 
     def _get(self, url: str) -> str:
         response = self._http.get(url)
+        body = response.text
         if response.status_code != httpx.codes.OK:
             # Do not propagate the URL: it contains the MAP_KEY.
-            raise httpx.HTTPStatusError(
+            is_auth = (
+                response.status_code in {httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN}
+                or "Invalid MAP_KEY" in body
+            )
+            exc_cls = FirmsAuthError if is_auth else httpx.HTTPStatusError
+            raise exc_cls(
                 f"FIRMS responded {response.status_code}",
                 request=httpx.Request("GET", self._base_url),
                 response=response,
             )
-        return response.text
+        if body.lstrip().startswith(("Invalid MAP_KEY", "Invalid API call")):
+            raise FirmsAuthError(
+                "FIRMS rejected MAP_KEY",
+                request=httpx.Request("GET", self._base_url),
+                response=response,
+            )
+        return body
 
     def availability(self) -> dict[str, tuple[date, date]]:
         """First and last date each source holds (`/api/data_availability`)."""

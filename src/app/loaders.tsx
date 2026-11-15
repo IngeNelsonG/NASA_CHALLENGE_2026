@@ -135,10 +135,10 @@ export function DataLoaders() {
   const source = coverage.data?.source;
   const hotReady = !!hot.data && !hot.isFetching;
   useEffect(() => {
-    if (!hotReady || source !== 'firms' || granularity === 'year') return;
+    if (world || !hotReady || source !== 'firms' || granularity === 'year') return;
     const spans = granularity === 'day' ? [timelineRange(date, 'month')] : [1, -1].map((k) => timelineRange(monthStart(date, k), 'month'));
     for (const r of spans) if (r.from <= todayIso()) api.hotspotsWarm({ bbox: aoi.bbox, ...r }).catch(() => undefined);
-  }, [hotReady, source, date, granularity, aoi.bbox]);
+  }, [world, hotReady, source, date, granularity, aoi.bbox]);
 
   return null;
 }

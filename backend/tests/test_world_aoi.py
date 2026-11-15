@@ -53,6 +53,9 @@ def test_world_supports_every_area_endpoint(world_client: TestClient) -> None:
     )
     assert r.status_code == 200
     assert "highlights" in r.text
+    exp = world_client.get("/api/v1/explain", params={"aoi": "world", "month": "2019-08"})
+    assert exp.status_code == 200
+    assert exp.json()["facts"]["area_name"] == "World"
 
 
 def test_world_is_not_a_search_result_or_an_overview_row(world_client: TestClient) -> None:

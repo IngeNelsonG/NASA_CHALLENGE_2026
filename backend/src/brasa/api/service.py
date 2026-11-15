@@ -551,6 +551,20 @@ class CountryCalendars:
         _with_regions(rows, count_anomalous(calendars.values()), len(calendars))
         return rows, ratio, len(calendars)
 
+    def world_calendar(self) -> tuple[list[dict[str, Any]], SensorRatio, int | None] | None:
+        """Summed global monthly archive for `world` AOI, with its fitted VIIRS/MODIS ratio."""
+        if self.monthly.empty or self.fallback_ratio is None:
+            return None
+        world = (
+            self.monthly.groupby(["month", "sensor"], observed=True)["count"].sum().reset_index()
+        )
+        try:
+            ratio = fit_sensor_ratio(world)
+        except InsufficientOverlapError:
+            ratio = self.fallback_ratio
+        base = _calendar(world, ratio, start_month=self.record_start, end_month=self.record_end)
+        return _rows(base, self.oni), ratio, None
+
 
 def recent_summary(
     service: CalendarService, recent: RecentDetections, area: BoundingBox, department: str | None

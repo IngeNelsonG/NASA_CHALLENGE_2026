@@ -224,6 +224,7 @@ def _aoi_target(entry: AoiEntry, places: Places) -> Target | None:
     )
     single = entry.subdivisions[0] if len(entry.subdivisions) == 1 else None
     by_kind: dict[str, Target | None] = {
+        "world": ("world", "World", None),
         "department": (
             ("area", places.departments[department], department)
             if department in places.departments
@@ -752,6 +753,25 @@ def _firms_hotspots(settings: Settings) -> FirmsHotspots | None:
     return FirmsHotspots(FirmsClient(key, settings.firms_base_url))
 
 
+def _rows_for_target(
+    target: Target, service: CalendarService, countries: CountryCalendars
+) -> tuple[list[dict[str, Any]], SensorRatio, int | None]:
+    kind, value, subdivision = target
+    if kind == "world":
+        return countries.world_calendar() or ([], service.sensor_ratio, None)
+    if kind == "country":
+        result = countries.calendar_for(value, subdivision)
+        if result is None:
+            return [], service.sensor_ratio, None
+        rows, ratio, regions_total = result
+        return rows, ratio, regions_total or None
+    if hasattr(service, "calendar_and_ratio_for"):
+        rows, local_ratio = service.calendar_and_ratio_for(BoundingBox.parse(value), subdivision)
+        return rows, local_ratio, service.regions_total or None
+    rows = service.calendar_for(BoundingBox.parse(value), subdivision)
+    return rows, service.sensor_ratio, service.regions_total or None
+
+
 def create_app(
     settings: Settings | None = None,
     *,
@@ -801,20 +821,7 @@ def create_app(
     @lru_cache(maxsize=EXPLAIN_CACHE_SIZE)
     @_bounded
     def rows_for(target: Target) -> tuple[list[dict[str, Any]], SensorRatio, int | None]:
-        kind, value, subdivision = target
-        if kind == "country":
-            result = countries.calendar_for(value, subdivision)
-            if result is None:
-                return [], service.sensor_ratio, None
-            rows, ratio, regions_total = result
-            return rows, ratio, regions_total or None
-        if hasattr(service, "calendar_and_ratio_for"):
-            rows, local_ratio = service.calendar_and_ratio_for(
-                BoundingBox.parse(value), subdivision
-            )
-            return rows, local_ratio, service.regions_total or None
-        rows = service.calendar_for(BoundingBox.parse(value), subdivision)
-        return rows, service.sensor_ratio, service.regions_total or None
+        return _rows_for_target(target, service, countries)
 
     def name_of(target: Target) -> str | None:
         kind, value, region = target

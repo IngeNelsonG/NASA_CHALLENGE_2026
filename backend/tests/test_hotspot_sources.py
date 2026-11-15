@@ -1,6 +1,7 @@
 from datetime import date
 from pathlib import Path
 
+import httpx
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -19,7 +20,7 @@ from brasa.api.service import CalendarService, CountryCalendars
 from brasa.config import Settings
 from brasa.domain.models import BoundingBox, InvalidBoundingBoxError
 from brasa.ingestion.boundaries import load_departments
-from brasa.ingestion.firms_client import FirmsSource
+from brasa.ingestion.firms_client import FirmsAuthError, FirmsSource
 
 INSIDE_COLOMBIA = BoundingBox(-74.0, 4.0, -72.0, 6.0)
 ARGENTINA = BoundingBox(-73.6, -55.1, -53.6, -21.8)
@@ -208,3 +209,39 @@ def test_hotspot_endpoints_accept_areas_across_the_antimeridian(
     assert ember_client.post("/api/hotspots/warm", params=params).json() == {"queued": False}
     bad = {**params, "from": "2024-09-01"}
     assert ember_client.get("/api/hotspots/coverage", params=bad).status_code == 422
+
+
+def test_hotspot_source_skips_full_world_box() -> None:
+    d = date(2025, 11, 1)
+    world_box = BoundingBox(-180.0, -90.0, 180.0, 90.0)
+    assert hotspot_source(world_box, d, d, firms_available=True) == "none"
+
+
+def test_firms_auth_failure_disables_further_requests(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    calls: list[FirmsSource] = []
+
+    class _InvalidKeyClient:
+        def fetch_area(
+            self, source: FirmsSource, area: BoundingBox, start: date, day_range: int = 1
+        ) -> pd.DataFrame:
+            calls.append(source)
+            req = httpx.Request("GET", "https://firms.modaps.eosdis.nasa.gov")
+            raise FirmsAuthError(
+                "FIRMS responded 400",
+                request=req,
+                response=httpx.Response(400, text="Invalid MAP_KEY.", request=req),
+            )
+
+    firms = FirmsHotspots(_InvalidKeyClient(), today=lambda: date(2026, 11, 14))  # type: ignore[arg-type]
+    assert firms.available is True
+    with caplog.at_level("WARNING"):
+        out = firms.fetch(ARGENTINA, date(2024, 8, 1), date(2024, 8, 12))
+    assert out.empty
+    assert firms.available is False
+    n_after_first = len(calls)
+    assert firms.fetch(ARGENTINA, date(2024, 9, 1), date(2024, 9, 5)).empty
+    assert firms.warm(ARGENTINA, date(2024, 10, 1), date(2024, 10, 5)) is False
+    assert len(calls) == n_after_first
+    assert sum("Invalid MAP_KEY" in rec.message for rec in caplog.records) == 1

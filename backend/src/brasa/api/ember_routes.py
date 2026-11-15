@@ -1454,6 +1454,10 @@ def _build_aoi_lookup(
     return dept_geoms, countries
 
 
+def _firms_available(ctx: _EmberContext) -> bool:
+    return ctx.firms is not None and getattr(ctx.firms, "available", True)
+
+
 def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> None:
     dept_geoms, country_geoms = _build_aoi_lookup(ctx)
     co_entry = ctx.aoi_by_id.get("co")
@@ -1533,7 +1537,7 @@ def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, buil
             ) from exc
         if start_d > end_d:
             raise HTTPException(status_code=422, detail="`from` must not be after `to`.")
-        source = areas_source(areas, start_d, end_d, firms_available=ctx.firms is not None)
+        source = areas_source(areas, start_d, end_d, firms_available=_firms_available(ctx))
         if source == "too_long":
             # Points outside Colombia come live from FIRMS for short spans only; answering with
             # the few archive points that fall inside Colombia's box would draw a misleading map.
@@ -1581,9 +1585,10 @@ def _register_area_routes(app: FastAPI, ctx: _EmberContext) -> None:
     ) -> dict[str, Any]:
         """Where the points for this area and span come from, so the UI can explain gaps."""
         areas, start_d, end_d = _parse_span(bbox, from_str, to_str)
+        firms_ok = _firms_available(ctx)
         return {
-            "source": areas_source(areas, start_d, end_d, firms_available=ctx.firms is not None),
-            "firmsConfigured": ctx.firms is not None,
+            "source": areas_source(areas, start_d, end_d, firms_available=firms_ok),
+            "firmsConfigured": firms_ok,
             "maxDays": FIRMS_MAX_SPAN_DAYS,
         }
 
@@ -1597,7 +1602,11 @@ def _register_area_routes(app: FastAPI, ctx: _EmberContext) -> None:
         already cached when the user gets there. Archive areas need no warm-up."""
         areas, start_d, end_d = _parse_span(bbox, from_str, to_str)
         firms = ctx.firms
-        if firms is None or areas_source(areas, start_d, end_d, firms_available=True) != "firms":
+        if (
+            firms is None
+            or not _firms_available(ctx)
+            or areas_source(areas, start_d, end_d, firms_available=True) != "firms"
+        ):
             return {"queued": False}
         queued = [firms.warm(area, start_d, end_d) for area in areas]
         return {"queued": any(queued)}
