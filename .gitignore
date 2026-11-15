@@ -23,3 +23,6 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
+.vercel
+.env*
+!.env.example
