@@ -1,6 +1,6 @@
 import { Canvas } from '@react-three/fiber';
 import { isMobile } from '@/lib/capabilities';
-import { useStore } from '@/store';
+import { isLowPower, useStore } from '@/store';
 import { CameraRig } from './CameraRig';
 import { Atmosphere, Earth } from './Globe';
 import { HexDensity, Hotspots } from './Hotspots';
@@ -12,11 +12,13 @@ import { Satellites } from './Satellites';
  * intro, the hero and the explorer. Rendering is on demand (see CameraRig for the frame policy).
  */
 export default function GlobeCanvas() {
+  // light mode draws at CSS pixel density: on a 2x screen that is ~3x fewer pixels than 1.75x
+  const low = useStore(isLowPower);
   return (
     <Canvas
       flat
       frameloop="demand"
-      dpr={isMobile() ? [1, 1.5] : [1, 1.75]}
+      dpr={low ? 1 : isMobile() ? [1, 1.5] : [1, 1.75]}
       gl={{ antialias: typeof window === 'undefined' || window.devicePixelRatio < 2, alpha: true, powerPreference: 'high-performance', stencil: false }}
       camera={{ fov: 30, near: 0.1, far: 20, position: [0, 0, 6] }}
       style={{ pointerEvents: 'none' }}

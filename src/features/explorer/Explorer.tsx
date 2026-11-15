@@ -5,7 +5,7 @@ import { AoiSearch } from '@/features/aoi/AoiSearch';
 import { HOTSPOT_COLOR } from '@/lib/colors';
 import { useGlobeStage } from '@/scenes/useGlobeStage';
 import { view, type StageLayout } from '@/scenes/view';
-import { useStore } from '@/store';
+import { useStore, type Quality } from '@/store';
 import { useData } from '@/store/data';
 import { Map2D } from './Map2D';
 import { SatelliteImage } from './SatelliteImage';
@@ -46,6 +46,9 @@ export function Explorer() {
   const aoi = useStore((s) => s.aoi);
   const prevAoi = useStore((s) => s.aoiHistory[s.aoiHistory.length - 1]);
   const undoAoi = useStore((s) => s.undoAoi);
+  const quality = useStore((s) => s.quality);
+  const autoLow = useStore((s) => s.autoLow);
+  const setQuality = useStore((s) => s.setQuality);
   const set = useStore((s) => s.set);
   useGlobeStage(stage, 'explore', { interactive: viewMode === '3d', layout: besidePanels });
 
@@ -153,6 +156,25 @@ export function Explorer() {
                     <span aria-hidden className="inline-block h-0.5 w-3 bg-harmonized" /> {t('legend.aoi')}
                   </span>
                 </p>
+                {webgl && viewMode === '3d' && (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-ink-dim">
+                      {t('quality.label')}
+                      {quality === 'auto' && autoLow && <span className="block text-ink-mute">{t('quality.auto_low')}</span>}
+                    </p>
+                    <Segmented<Quality>
+                      size="sm"
+                      label={t('quality.label')}
+                      value={quality}
+                      onChange={setQuality}
+                      options={[
+                        { value: 'auto', label: t('quality.auto'), title: t('quality.auto_hint') },
+                        { value: 'high', label: t('quality.high') },
+                        { value: 'low', label: t('quality.low'), title: t('quality.low_hint') },
+                      ]}
+                    />
+                  </div>
+                )}
                 <CoverageNote />
               </div>
               <SatelliteImage />

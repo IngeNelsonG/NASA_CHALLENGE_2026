@@ -4,11 +4,15 @@ import { PerspectiveCamera, Raycaster, Vector2 } from 'three';
 import { reducedMotion } from '@/lib/capabilities';
 import { clamp, latLonToXYZ, wrapLon, xyzToLatLon } from '@/lib/geo';
 import { simClock } from '@/lib/simClock';
-import { useStore } from '@/store';
+import { isLowPower, useStore } from '@/store';
 import { view } from './view';
 
 const FOV = 30;
 const F = 1 / Math.tan((FOV * Math.PI) / 360);
+/** Median frame time above this while animating (< ~35 fps) switches `auto` quality to light. */
+const SLOW_FRAME = 1 / 35;
+const PERF_SAMPLES = 120;
+
 const smooth = (a: number, b: number, x: number) => {
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
@@ -20,6 +24,9 @@ const smooth = (a: number, b: number, x: number) => {
  */
 export function CameraRig() {
   const { camera, size, invalidate } = useThree();
+  // frame-time monitor: only frames that follow a requested frame are timed (on-demand rendering
+  // is otherwise idle, which says nothing about speed); every window of samples is judged, and it only ever steps down
+  const perf = useRef({ asked: false, samples: [] as number[] });
   const s = useRef({ init: false, stage: '', tx: 0, ty: 0, tf: 200, ox: 0, oy: 0, of: 0, alpha: 0, rect: null as DOMRect | null, rectStage: '' });
 
   useEffect(() => {
@@ -37,7 +44,13 @@ export function CameraRig() {
     };
     const renderable = () => !document.hidden && useStore.getState().viewMode === '3d' && (s.current.alpha > 0.004 || view.activeStage() !== null);
     // low-rate heartbeat: satellites and the terminator creep even when nothing else moves
-    const beat = window.setInterval(() => renderable() && invalidate(), 250);
+    // (4 Hz, or 2 Hz in light mode, where it is also what moves the satellites)
+    let tick = 0;
+    const beat = window.setInterval(() => {
+      tick++;
+      if (isLowPower(useStore.getState()) && tick % 2) return;
+      if (renderable()) invalidate();
+    }, 250);
     const vis = () => view.kick();
     document.addEventListener('visibilitychange', vis);
     invalidate();
@@ -52,7 +65,18 @@ export function CameraRig() {
   useFrame((_, rawDt) => {
     const dt = Math.min(0.1, rawDt);
     const st = s.current;
-    const { phase, viewMode, tool, hoverSat } = useStore.getState();
+    const state = useStore.getState();
+    const { phase, viewMode, tool, hoverSat } = state;
+    const low = isLowPower(state);
+    const p = perf.current;
+    if (p.asked && state.quality === 'auto' && !state.autoLow) {
+      p.samples.push(rawDt);
+      if (p.samples.length >= PERF_SAMPLES) {
+        const median = p.samples.sort((a, b) => a - b)[PERF_SAMPLES >> 1];
+        p.samples.length = 0;
+        if (median > SLOW_FRAME) state.set({ autoLow: true });
+      }
+    }
     const W = size.width, H = size.height;
     const now = performance.now();
 
@@ -118,7 +142,8 @@ export function CameraRig() {
         view.vLon *= decay;
         view.vLat *= decay;
         moving = true;
-      } else if (now - view.lastInteract > 8000 && view.zoom < 1.4 && tool === 'pan' && !hoverSat && !reducedMotion() && ta > 0) {
+      } else if (now - view.lastInteract > 8000 && view.zoom < 1.4 && tool === 'pan' && !hoverSat && !reducedMotion() && !low && ta > 0) {
+        // the idle spin redraws every frame for as long as the globe is visible: not in light mode
         view.lon = wrapLon(view.lon + 2.2 * dt);
         moving = true;
       }
@@ -145,7 +170,11 @@ export function CameraRig() {
     if (layer) (layer as HTMLElement).style.opacity = st.alpha < 0.004 ? '0' : st.alpha.toFixed(3);
 
     const visible = !document.hidden && viewMode === '3d' && (ta > 0 || st.alpha > 0.004);
-    if (visible && (moving || view.dragging || settling || now - view.kickAt < 600 || simClock.scale > 1 || phase === 'intro' || view.draft)) invalidate();
+    // a sped-up clock (the default 60x) redraws every frame so satellites glide; light mode lets
+    // the heartbeat move them instead of keeping the GPU busy for as long as the globe is visible
+    const clockRunning = simClock.scale > 1 && !low;
+    p.asked = visible && (moving || view.dragging || settling || now - view.kickAt < 600 || clockRunning || phase === 'intro' || !!view.draft);
+    if (p.asked) invalidate();
   }, -1);
 
   return null;

@@ -4,7 +4,7 @@ import { BackSide, AdditiveBlending, ShaderMaterial, SRGBColorSpace, Texture, Te
 import { isMobile } from '@/lib/capabilities';
 import { latLonToXYZ, subsolar } from '@/lib/geo';
 import { simClock } from '@/lib/simClock';
-import { useStore } from '@/store';
+import { isLowPower, useStore } from '@/store';
 
 const sun = new Vector3(1, 0, 0);
 /** Sun direction in the Earth-fixed scene frame, shared by Earth and Atmosphere. */
@@ -51,6 +51,7 @@ const ATMO_FRAG = /* glsl */ `
 
 export function Earth() {
   const { gl, invalidate } = useThree();
+  const low = useStore(isLowPower);
   const material = useMemo(
     () =>
       new ShaderMaterial({
@@ -66,6 +67,7 @@ export function Earth() {
     let alive = true;
     const loader = new TextureLoader();
     const dayRes =
+      !low &&
       !isMobile() &&
       gl.capabilities.maxTextureSize >= 4096 &&
       gl.getPixelRatio() * Math.max(window.innerWidth, window.innerHeight) > 2000
@@ -83,18 +85,21 @@ export function Earth() {
       material.uniforms[key].value = t;
       invalidate();
     };
-    Promise.all([load('day', 512), load('night', 512)])
-      .then(([d, n]) => {
-        apply('uDay', d);
-        apply('uNight', n);
-        useStore.getState().set({ sceneReady: true });
-        return Promise.all([load('day', dayRes).then((t) => apply('uDay', t)), load('night', 2048).then((t) => apply('uNight', t))]);
-      })
-      .catch(() => useStore.getState().set({ sceneReady: true }));
+    const full = () => Promise.all([load('day', dayRes).then((t) => apply('uDay', t)), load('night', 2048).then((t) => apply('uNight', t))]);
+    // a quality switch keeps the current picture and only swaps the day texture size
+    (material.uniforms.uDay.value
+      ? full()
+      : Promise.all([load('day', 512), load('night', 512)]).then(([d, n]) => {
+          apply('uDay', d);
+          apply('uNight', n);
+          useStore.getState().set({ sceneReady: true });
+          return full();
+        })
+    ).catch(() => useStore.getState().set({ sceneReady: true }));
     return () => {
       alive = false;
     };
-  }, [gl, invalidate, material]);
+  }, [gl, invalidate, material, low]);
 
   useFrame(() => {
     const p = subsolar(simClock.now());

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 import { bboxCenter, bboxSpan, clamp, todayIso } from '@/lib/geo';
+import { detectLowTier } from '@/lib/capabilities';
 import { RECORD_START } from '@/lib/env';
 import type { AnalystHighlight, AOI, Resolution } from '@/lib/types';
 import { view } from '@/scenes/view';
@@ -33,11 +34,22 @@ export type Granularity = 'day' | 'month' | 'year';
 export type LayerId = 'density' | 'terminator' | 'orbits' | 'borders';
 export type DateRange = { from: string; to: string };
 export type TimeScale = 1 | 60 | 600;
+/** Globe rendering quality: `auto` follows the device and the measured frame time. */
+export type Quality = 'auto' | 'high' | 'low';
 
 /** How many previous areas "undo selection" can step back through. */
 const HISTORY = 10;
 
 export const DEFAULT_AOI: AOI = { id: 'co-orinoquia', name: 'Orinoquía, Colombia', bbox: [-74.0, 2.0, -67.4, 7.2] };
+
+const storedQuality = (): Quality => {
+  try {
+    const q = localStorage.getItem('quality');
+    return q === 'high' || q === 'low' ? q : 'auto';
+  } catch {
+    return 'auto';
+  }
+};
 
 const storedLang = (): Lang => {
   try {
@@ -53,6 +65,9 @@ type State = {
   sceneReady: boolean;
   webgl: boolean;
   viewMode: '3d' | '2d';
+  quality: Quality;
+  /** set by device detection or the frame-time monitor; only used while `quality` is `auto` */
+  autoLow: boolean;
   layers: Record<LayerId, boolean>;
   aoi: AOI;
   /** areas selected before the current one, most recent last (for "undo selection") */
@@ -71,6 +86,7 @@ type State = {
   section: string;
 
   setLang: (l: Lang) => void;
+  setQuality: (q: Quality) => void;
   set: (p: Partial<State>) => void;
   toggleLayer: (id: LayerId) => void;
   setAoi: (aoi: AOI, fly?: boolean) => void;
@@ -92,6 +108,8 @@ export const useStore = create<State>((set, get) => ({
   sceneReady: false,
   webgl: true,
   viewMode: '3d',
+  quality: storedQuality(),
+  autoLow: typeof window !== 'undefined' && detectLowTier(),
   layers: { density: false, terminator: true, orbits: true, borders: true },
   aoi: DEFAULT_AOI,
   aoiHistory: [],
@@ -115,6 +133,14 @@ export const useStore = create<State>((set, get) => ({
     }
     document.documentElement.lang = lang;
     set({ lang });
+  },
+  setQuality: (quality) => {
+    try {
+      localStorage.setItem('quality', quality);
+    } catch {
+      /* storage unavailable */
+    }
+    set({ quality });
   },
   set: (p) => set(p),
   toggleLayer: (id) => set((s) => ({ layers: { ...s.layers, [id]: !s.layers[id] } })),
@@ -171,3 +197,6 @@ export function timelineRange(date: string, g: Granularity): { from: string; to:
   }
   return { from: `${y}-01-01`, to: cap(`${y}-12-31`) };
 }
+
+/** Light globe: lower pixel density, 2K textures, no idle spin, slower satellite heartbeat. */
+export const isLowPower = (s: { quality: Quality; autoLow: boolean }) => s.quality === 'low' || (s.quality === 'auto' && s.autoLow);
