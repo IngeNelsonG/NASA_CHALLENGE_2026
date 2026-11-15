@@ -1940,8 +1940,9 @@ def register_ember_routes(
     firms: FirmsHotspots | None = None,
     warm_up: bool = False,
     assistant: Assistant | None = None,
-) -> None:
-    """Register unified /api/* endpoints backed by real NASA FIRMS archives."""
+) -> Mapping[str, AoiEntry]:
+    """Register unified /api/* endpoints backed by real NASA FIRMS archives; returns the area
+    index so other routes can take the same area ids."""
     aoi_by_id, aoi_ordered = _build_aoi_index(department_collection, world_collection, countries)
     export_path = getattr(service, "export_path", None)
     parquet_path = export_path or (data_dir / PROCESSED_DETECTIONS)
@@ -2055,3 +2056,4 @@ def register_ember_routes(
                         logger.warning("Calendar warm-up failed for %s", aoi_id)
 
         threading.Thread(target=_warm, name="calendar-warm", daemon=True).start()
+    return aoi_by_id

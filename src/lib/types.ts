@@ -67,6 +67,9 @@ export type AnalystRequest = {
   history?: { role: 'user' | 'assistant'; content: string }[];
 };
 // The stream ends with a JSON payload: { highlights: [...] }
+// GET /api/v1/explain?aoi=&month=YYYY-MM&lang= — the month in plain words (AI or template).
+export type MonthExplanation = { summary: string; generated_by: 'ai' | 'template' };
+
 export type AnalystHighlight = { date: string; reason: string };
 
 export type EnsoPhase = 'EL_NINO' | 'LA_NINA' | 'NEUTRAL' | 'UNKNOWN';

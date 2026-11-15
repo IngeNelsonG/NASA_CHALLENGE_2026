@@ -28,8 +28,8 @@ from brasa import __version__
 from brasa.alerts.detector import evaluate_rows, summarize_alerts
 from brasa.alerts.schemas import AlertItem, AlertSeverity, AlertsResponse
 from brasa.api.assistant import ASSISTANT_MAX_TOKENS, Assistant
+from brasa.api.ember_routes import AoiEntry, _resolve_aoi_id, register_ember_routes
 from brasa.api.ember_routes import _slug as aoi_slug
-from brasa.api.ember_routes import register_ember_routes
 from brasa.api.explain import (
     Summarizer,
     build_facts,
@@ -212,6 +212,48 @@ def _resolve(
             raise HTTPException(status_code=422, detail="Unknown subdivision for that country.")
         return ("country", country, subdivision)
     return ("area", _parse_bbox(bbox or COLOMBIA.as_firms_area()).as_firms_area(), None)
+
+
+def _aoi_target(entry: AoiEntry, places: Places) -> Target | None:
+    """The calendar behind an area id of the globe, or None when /explain has no record for it
+    (a group of regions, or a drawn box outside Colombia's point archive)."""
+    country, department = entry.country or "", entry.department or ""
+    west, south, east, north = entry.bbox
+    in_colombia = (COLOMBIA.west <= west and COLOMBIA.south <= south) and (
+        east <= COLOMBIA.east and north <= COLOMBIA.north
+    )
+    single = entry.subdivisions[0] if len(entry.subdivisions) == 1 else None
+    by_kind: dict[str, Target | None] = {
+        "department": (
+            ("area", places.departments[department], department)
+            if department in places.departments
+            else None
+        ),
+        "colombia_all": ("area", COLOMBIA.as_firms_area(), None),
+        "colombia_box": (
+            ("area", BoundingBox(west, south, east, north).as_firms_area(), None)
+            if in_colombia
+            else None
+        ),
+        "country": ("country", country, None) if country in places.subdivisions else None,
+        "subdivision": (
+            ("country", country, single)
+            if single in places.subdivisions.get(country, set())
+            else None
+        ),
+    }
+    return by_kind.get(entry.kind)
+
+
+def _explain_target(
+    aoi: str, aoi_index: Mapping[str, AoiEntry], places: Places
+) -> tuple[Target, str]:
+    """Target and display name for an area id; 404 when it has no monthly record."""
+    entry = _resolve_aoi_id(aoi, aoi_index)
+    target = _aoi_target(entry, places) if entry is not None else None
+    if entry is None or target is None:
+        raise HTTPException(status_code=404, detail="No monthly record for this area.")
+    return target, entry.name
 
 
 def _parse_month(month: str) -> date:
@@ -840,14 +882,14 @@ def create_app(
     # ponytail: per-process caches and unbounded distinct bboxes, so AI cost abuse is bounded
     # only by edge rate limiting; upgrade to a shared cache + app-level rate limit if needed.
     @lru_cache(maxsize=EXPLAIN_CACHE_SIZE)
-    def facts_for(target: Target, month: date) -> ExplainFacts | None:
+    def facts_for(target: Target, month: date, name: str | None = None) -> ExplainFacts | None:
         rows, ratio, regions_total = rows_for(target)
         kind, value, _ = target
         return build_facts(
             rows,
             month,
             ratio.ratio,
-            area_name=name_of(target),
+            area_name=name_of(target) or name,  # `name`: a named box such as Orinoquía
             departments_total=regions_total,
             in_colombia=kind == "area" or value == "Colombia",
         )
@@ -860,11 +902,18 @@ def create_app(
         country: str | None = Query(default=None, max_length=COUNTRY_MAX_LENGTH),
         subdivision: str | None = Query(default=None, max_length=SUBDIVISION_MAX_LENGTH),
         department: str | None = Query(default=None, max_length=DEPARTMENT_MAX_LENGTH),
+        aoi: str | None = Query(
+            default=None, max_length=120, description="An area id of the globe (/api/aoi)."
+        ),
         lang: Lang = "es",
     ) -> ExplainResponse:
         target_month = _parse_month(month)
-        target = places.resolve(bbox, country, subdivision, department)
-        facts = facts_for(target, target_month)
+        target, name = (
+            _explain_target(aoi, aoi_index, places)
+            if aoi is not None
+            else (places.resolve(bbox, country, subdivision, department), None)
+        )
+        facts = facts_for(target, target_month, name)
         if facts is None:
             raise HTTPException(status_code=404, detail="No data for that month in this area.")
         generated = summarize((target, target_month, lang), facts, lang)
@@ -880,7 +929,8 @@ def create_app(
 
     _alerts_routes(app, service, places, recent_src, rows_for=rows_for, name_of=name_of)
 
-    register_ember_routes(
+    # the globe's area ids, for /explain?aoi= (requests only arrive once this is assigned)
+    aoi_index = register_ember_routes(
         app,
         service=service,
         countries=countries,

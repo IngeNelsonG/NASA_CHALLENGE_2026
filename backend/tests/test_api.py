@@ -223,6 +223,28 @@ def test_explain_retries_llm_after_transient_failure() -> None:
     assert client.get("/api/v1/explain", params=params).json()["generated_by"] == "ai"
 
 
+@pytest.mark.parametrize(
+    ("aoi", "area_name"),
+    [
+        ("co", "Colombia"),
+        ("co-orinoquia", "Orinoquía, Colombia"),  # a named box gets its name
+        ("country:brazil", "Brazil"),
+        ("br-mato-grosso", "Mato Grosso, Brazil"),
+    ],
+)
+def test_explain_takes_the_globe_area_id(client: TestClient, aoi: str, area_name: str) -> None:
+    response = client.get("/api/v1/explain", params={"month": "2012-03", "aoi": aoi})
+    assert response.status_code == 200
+    assert response.json()["facts"]["area_name"] == area_name
+
+
+@pytest.mark.parametrize("aoi", ["bbox:10,10,11,11", "nope", "br-pantanal"])
+def test_explain_area_ids_without_a_monthly_record_are_404(client: TestClient, aoi: str) -> None:
+    # a drawn box outside Colombia, an unknown id, a group of subdivisions
+    response = client.get("/api/v1/explain", params={"month": "2012-03", "aoi": aoi})
+    assert response.status_code == 404
+
+
 def test_explain_month_not_in_series(client: TestClient) -> None:
     assert client.get("/api/v1/explain", params={"month": "1990-01"}).status_code == 404
     empty_area = {"month": "2012-03", "bbox": "10,10,11,11"}

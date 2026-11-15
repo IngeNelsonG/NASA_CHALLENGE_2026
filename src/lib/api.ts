@@ -10,6 +10,7 @@ import type {
   EnsoResponse,
   Hotspot,
   HotspotCoverage,
+  MonthExplanation,
   RawSensor,
   Resolution,
   TLE,
@@ -65,4 +66,6 @@ export const api = {
   alerts: (aoi: string, signal?: AbortSignal) => json<AlertAssessment>(`/api/alerts?${qs({ aoi })}`, signal),
   alertsOverview: (signal?: AbortSignal) => json<AlertsOverview>('/api/alerts/overview', signal),
   tle: (signal?: AbortSignal) => json<TLE[]>('/api/satellites/tle', signal),
+  explainMonth: (p: { aoi: string; month: string; lang: string }, signal?: AbortSignal) =>
+    json<MonthExplanation>(`/api/v1/explain?${qs(p)}`, signal),
 };

@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { fmtDay, fmtInt, fmtMonth, useT } from '@/app/i18n';
 import { Segmented, Spinner } from '@/components/ui';
+import { api, ApiError } from '@/lib/api';
 import { HOTSPOT_COLOR } from '@/lib/colors';
 import { dayIdx, daysInYear, isoDay, todayIso, yearStartIdx } from '@/lib/geo';
 import { useStore, type Granularity } from '@/store';
@@ -42,6 +44,19 @@ export function Timeline() {
   const hot = useData((s) => (noPoints ? null : s.hotspots));
   const loading = useData((s) => s.hotspotsLoading);
   const mdl = model(g, date);
+
+  // the month on screen in plain words; not while playing, so it is asked once per stop
+  const aoiId = useStore((s) => s.aoi.id);
+  const [explainOpen, setExplainOpen] = useState(false);
+  const month = date.slice(0, 7);
+  const explain = useQuery({
+    queryKey: ['explain', aoiId, month, lang],
+    queryFn: ({ signal }) => api.explainMonth({ aoi: aoiId, month, lang }, signal),
+    enabled: explainOpen && !playing && g !== 'year',
+    staleTime: Infinity,
+    retry: (n, e) => !(e instanceof ApiError && e.status === 404) && n < 1,
+  });
+  const noRecord = explain.error instanceof ApiError && explain.error.status === 404;
 
   const label = g === 'day' ? fmtDay(date, lang) : g === 'month' ? fmtMonth(date, lang) : date.slice(0, 4);
   const go = (i: number) => set({ date: mdl.toDate(Math.max(mdl.min, Math.min(mdl.max, i))) });
@@ -134,6 +149,37 @@ export function Timeline() {
         <span className="hidden text-center sm:inline">{t('time.shown')}</span>
         <span>{g === 'day' ? fmtDay(mdl.toDate(mdl.max), lang) : mdl.toDate(mdl.max).slice(0, 4)}</span>
       </div>
+      {g !== 'year' && (
+        <div className="mt-2 border-t border-line pt-2">
+          <button type="button" className="btn btn-sm" aria-expanded={explainOpen} aria-controls="month-explanation" onClick={() => setExplainOpen((o) => !o)}>
+            <span aria-hidden className="text-accent">✦</span>
+            {explainOpen ? t('time.explain_hide') : t('time.explain', { month: fmtMonth(`${month}-01`, lang) })}
+          </button>
+          {explainOpen && (
+            <div id="month-explanation" className="mt-2 max-h-48 overflow-y-auto text-sm leading-relaxed text-ink" aria-live="polite">
+              {playing ? (
+                <p className="text-xs text-ink-dim">{t('time.explain_paused')}</p>
+              ) : explain.data ? (
+                <>
+                  <p>{explain.data.summary}</p>
+                  <p className="mt-1.5 text-xs text-ink-mute">{t(explain.data.generated_by === 'ai' ? 'time.explain_ai' : 'time.explain_template')}</p>
+                </>
+              ) : noRecord ? (
+                <p className="text-xs text-ink-dim">{t('time.explain_none')}</p>
+              ) : explain.isError ? (
+                <p role="alert" className="text-xs text-ink-dim">
+                  {t('time.explain_error')}{' '}
+                  <button type="button" className="tap inline-flex items-center underline" onClick={() => void explain.refetch()}>
+                    {t('common.retry')}
+                  </button>
+                </p>
+              ) : (
+                <Spinner label={t('time.explain_loading')} />
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
