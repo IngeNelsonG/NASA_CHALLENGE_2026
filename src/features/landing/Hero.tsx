@@ -7,7 +7,7 @@ import { isMobile } from '@/lib/capabilities';
 import { APP_NAME } from '@/lib/env';
 import { useGlobeStage } from '@/scenes/useGlobeStage';
 import type { StageLayout } from '@/scenes/view';
-import { useStore } from '@/store';
+import { useAoiName, useStore } from '@/store';
 
 const goTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -23,7 +23,7 @@ export function Hero() {
   const t = useT();
   const stage = useRef<HTMLDivElement>(null);
   const viewMode = useStore((s) => s.viewMode);
-  const aoi = useStore((s) => s.aoi);
+  const aoiName = useAoiName();
   const mobile = isMobile();
   // On phones the globe is not interactive here, so vertical swipes always scroll the page.
   useGlobeStage(stage, 'hero', { interactive: !mobile && viewMode === '3d', layout: horizon });
@@ -69,7 +69,7 @@ export function Hero() {
               </button>
             </div>
             <p className="mt-2.5 text-xs text-ink-dim">
-              {t('aoi.current')}: <span className="font-semibold text-ink">{aoi.name}</span>
+              {t('aoi.current')}: <span className="font-semibold text-ink">{aoiName}</span>
               <span aria-hidden> · </span>
               <button type="button" className="tap inline-flex items-center underline underline-offset-4 hover:text-ink" onClick={() => goTo('calendar')}>
                 {t('hero.calendar_cta')}

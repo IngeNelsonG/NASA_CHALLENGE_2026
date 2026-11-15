@@ -1,10 +1,9 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
 import { BackSide, AdditiveBlending, ShaderMaterial, SRGBColorSpace, Texture, TextureLoader, Vector3 } from 'three';
-import { isMobile } from '@/lib/capabilities';
 import { latLonToXYZ, subsolar } from '@/lib/geo';
 import { simClock } from '@/lib/simClock';
-import { isLowPower, useStore } from '@/store';
+import { useStore } from '@/store';
 
 const sun = new Vector3(1, 0, 0);
 /** Sun direction in the Earth-fixed scene frame, shared by Earth and Atmosphere. */
@@ -51,7 +50,6 @@ const ATMO_FRAG = /* glsl */ `
 
 export function Earth() {
   const { gl, invalidate } = useThree();
-  const low = useStore(isLowPower);
   const material = useMemo(
     () =>
       new ShaderMaterial({
@@ -62,17 +60,10 @@ export function Earth() {
     [],
   );
 
-  // Progressive textures: 512 px first (≈12 KB for both), then 2K night and 2K/4K day depending on viewport pixels.
+  // Progressive textures: 512 px first (≈12 KB for both), then 2K day and night (the light globe).
   useEffect(() => {
     let alive = true;
     const loader = new TextureLoader();
-    const dayRes =
-      !low &&
-      !isMobile() &&
-      gl.capabilities.maxTextureSize >= 4096 &&
-      gl.getPixelRatio() * Math.max(window.innerWidth, window.innerHeight) > 2000
-        ? 4096
-        : 2048;
     const load = (name: 'day' | 'night', res: number) =>
       loader.loadAsync(`${import.meta.env.BASE_URL}textures/earth-${name}-${res}.webp`).then((t) => {
         t.colorSpace = SRGBColorSpace;
@@ -85,8 +76,7 @@ export function Earth() {
       material.uniforms[key].value = t;
       invalidate();
     };
-    const full = () => Promise.all([load('day', dayRes).then((t) => apply('uDay', t)), load('night', 2048).then((t) => apply('uNight', t))]);
-    // a quality switch keeps the current picture and only swaps the day texture size
+    const full = () => Promise.all([load('day', 2048).then((t) => apply('uDay', t)), load('night', 2048).then((t) => apply('uNight', t))]);
     (material.uniforms.uDay.value
       ? full()
       : Promise.all([load('day', 512), load('night', 512)]).then(([d, n]) => {
@@ -99,7 +89,7 @@ export function Earth() {
     return () => {
       alive = false;
     };
-  }, [gl, invalidate, material, low]);
+  }, [gl, invalidate, material]);
 
   useFrame(() => {
     const p = subsolar(simClock.now());

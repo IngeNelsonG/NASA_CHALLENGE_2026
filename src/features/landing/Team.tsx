@@ -2,10 +2,11 @@ import { useT } from '@/app/i18n';
 import { Reveal, RollText, SectionHeading } from '@/components/ui';
 
 const TEAM_URL = 'https://www.spaceappschallenge.org/2026/find-a-team/ustacode1/?tab=members';
+export const USTA_URL = 'https://santototunja.edu.co/';
 
 /** As listed on the team's Space Apps page. */
-const MEMBERS: { name: string; owner?: boolean }[] = [
-  { name: 'Nelson Felipe Gonzalez Gordillo', owner: true },
+const MEMBERS: { name: string }[] = [
+  { name: 'Nelson Felipe Gonzalez Gordillo' },
   { name: 'Jean Carlos Reyes' },
   { name: 'Daniel Esteban Alarcón Rojas' },
   { name: 'Edgard Leonardo Patiño Largo' },
@@ -36,10 +37,7 @@ export function Team() {
                   {initials(m.name)}
                 </p>
                 <h3 className="mt-auto pt-6 text-[15px] font-semibold leading-snug text-ink sm:text-base">{m.name}</h3>
-                <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-dim">
-                  {m.owner && <span className="chip !border-accent/60 !py-0.5 text-ink">{t('team.owner')}</span>}
-                  <span>Colombia</span>
-                </p>
+                <p className="mt-1.5 text-xs text-ink-dim">Colombia</p>
               </article>
             </Reveal>
           </li>
@@ -49,14 +47,22 @@ export function Team() {
       <Reveal delay={120} className="mx-auto mt-10 max-w-5xl lg:mt-14">
         <div className="panel grid items-center gap-6 p-5 sm:grid-cols-[auto_1fr_auto] sm:gap-8 sm:p-7">
           <div className="flex items-center gap-4">
-            <img
-              src={`${base}brand/usta-logo.png`}
-              alt="Universidad Santo Tomás"
-              width={280}
-              height={280}
-              loading="lazy"
-              className="h-20 w-20 shrink-0 rounded-full bg-white object-cover sm:h-24 sm:w-24"
-            />
+            <a
+              href={USTA_URL}
+              target="_blank"
+              rel="noreferrer"
+              title="santototunja.edu.co"
+              className="shrink-0 rounded-full transition-transform duration-300 hover:scale-105"
+            >
+              <img
+                src={`${base}brand/usta-logo.png`}
+                alt="Universidad Santo Tomás (santototunja.edu.co)"
+                width={280}
+                height={280}
+                loading="lazy"
+                className="h-20 w-20 rounded-full bg-white object-cover sm:h-24 sm:w-24"
+              />
+            </a>
             <div className="sm:hidden">
               <p className="font-semibold text-ink">Universidad Santo Tomás</p>
               <p className="text-xs text-ink-dim">{t('team.event')}</p>

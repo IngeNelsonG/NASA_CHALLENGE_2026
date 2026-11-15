@@ -7,7 +7,7 @@ import { RECORD_START } from '@/lib/env';
 import { todayIso } from '@/lib/geo';
 import type { CalendarCell, Resolution } from '@/lib/types';
 import { downloadCsv } from '@/lib/worker-client';
-import { useStore, type DateRange } from '@/store';
+import { type DateRange, isWorld, useAoiName, useStore } from '@/store';
 import { binStart, CalendarCanvas } from './CalendarCanvas';
 
 const hatchCss = `repeating-linear-gradient(135deg, ${NODATA_BG} 0 3px, ${NODATA_STROKE} 3px 4px)`;
@@ -149,6 +149,7 @@ function DateFilter({ range, onChange }: { range: DateRange; onChange: (r: DateR
 export default function CalendarSection() {
   const t = useT();
   const aoi = useStore((s) => s.aoi);
+  const aoiName = useAoiName();
   const range = useStore((s) => s.calRange);
   const setCalRange = useStore((s) => s.setCalRange);
   const resolution = useStore((s) => s.resolution);
@@ -177,8 +178,8 @@ export default function CalendarSection() {
     useStore.getState().focusDate(c.date, res === 'month' ? 'month' : res === 'week' ? 'month' : 'day');
 
   return (
-    // Rendered inside the explorer's dark window, right under the globe: one continuous surface.
-    <section id="calendar" className="relative scroll-mt-24 px-3 pb-6 pt-10 sm:px-6 lg:px-10 lg:pb-10 lg:pt-14 xl:pl-24" aria-labelledby="calendar-title">
+    // Rendered inside its own dark window (CalendarBlock), right after the explorer.
+    <div className="relative px-3 pb-6 pt-8 sm:px-6 sm:pt-10 lg:px-10 lg:pb-10 lg:pt-14 xl:pl-24">
       <header className="mb-6 flex flex-col gap-2 lg:mb-8 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
         <Reveal>
           <p className="eyebrow">{t('cal.eyebrow')}</p>
@@ -187,7 +188,7 @@ export default function CalendarSection() {
           </h2>
         </Reveal>
         <Reveal delay={120} className="max-w-xl">
-          <p className="text-sm leading-relaxed text-ink-dim sm:text-[15px]">{t('cal.lead', { aoi: aoi.name })}</p>
+          <p className="text-sm leading-relaxed text-ink-dim sm:text-[15px]">{t('cal.lead', { aoi: aoiName })}</p>
         </Reveal>
       </header>
       <div className="panel p-5 sm:p-6">
@@ -218,7 +219,12 @@ export default function CalendarSection() {
           </span>
         </div>
 
-        {monthlyOnly && (
+        {isWorld(aoi) && (
+          <p role="note" className="mt-4 rounded-lg bg-harmonized/10 px-3 py-2 text-xs leading-relaxed text-ink">
+            {t('cal.world_note')}
+          </p>
+        )}
+        {monthlyOnly && !isWorld(aoi) && (
           <p role="note" className="mt-4 rounded-lg bg-harmonized/10 px-3 py-2 text-xs leading-relaxed text-ink">
             {t('cal.monthly_only')}
           </p>
@@ -251,6 +257,6 @@ export default function CalendarSection() {
         </p>
         {monthly.data && <YearMonthTable cells={monthly.data.response.cells} range={range} visible={table} />}
       </div>
-    </section>
+    </div>
   );
 }

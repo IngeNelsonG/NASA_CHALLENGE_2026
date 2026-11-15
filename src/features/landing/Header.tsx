@@ -8,8 +8,10 @@ import { SECTIONS } from './OrbitNav';
 const LINKS = SECTIONS.slice(1);
 
 /**
- * Floating navigation: transparent over the hero, a dark pill once the page scrolls.
- * Desktop links roll on hover; below `lg` they move into a full-screen menu.
+ * Top navigation. It sits at the top of the page and scrolls away with it: on wide screens the
+ * orbit rail (OrbitNav) takes over; below `xl`, where there is no rail, a round menu button stays
+ * in the corner once the header is gone. Desktop links roll on hover; small screens use a
+ * full-screen menu.
  */
 export function Header() {
   const t = useT();
@@ -20,7 +22,7 @@ export function Header() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => setScrolled(window.scrollY > 120);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
@@ -31,7 +33,7 @@ export function Header() {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    const onResize = () => window.innerWidth >= 1024 && setOpen(false);
+    const onResize = () => window.innerWidth >= 1280 && setOpen(false);
     window.addEventListener('keydown', onKey);
     window.addEventListener('resize', onResize);
     return () => {
@@ -44,8 +46,8 @@ export function Header() {
   return (
     <>
       <header
-        className={`fixed inset-x-3 top-3 z-50 mx-auto max-w-[1400px] rounded-2xl border transition-[background-color,border-color,box-shadow] duration-500 sm:inset-x-5 sm:top-5 lg:inset-x-8 lg:top-7 ${
-          scrolled || open ? 'border-line bg-graphite-950/95 shadow-panel backdrop-blur-md' : 'border-transparent bg-transparent'
+        className={`absolute inset-x-3 top-3 z-50 mx-auto max-w-[1400px] rounded-2xl border transition-[background-color,border-color] duration-300 sm:inset-x-5 sm:top-5 lg:inset-x-8 lg:top-7 ${
+          open ? 'border-line bg-graphite-950/95' : 'border-transparent bg-transparent'
         }`}
       >
         <div className="flex h-14 items-center gap-3 px-4 lg:gap-5 lg:px-6">
@@ -103,8 +105,28 @@ export function Header() {
         </div>
       </header>
 
+      {/* below xl there is no orbit rail: keep a way back to the menu once the header has scrolled away */}
+      <button
+        type="button"
+        className={`btn btn-icon fixed right-3 top-3 z-50 rounded-full bg-graphite-950/90 shadow-panel backdrop-blur-md transition-[opacity,transform] duration-300 sm:right-5 sm:top-5 xl:hidden ${
+          scrolled ? 'opacity-100' : 'pointer-events-none -translate-y-3 opacity-0'
+        }`}
+        aria-hidden={!scrolled}
+        tabIndex={scrolled ? 0 : -1}
+        aria-expanded={open}
+        aria-controls="mobile-menu"
+        aria-label={t(open ? 'header.menu_close' : 'header.menu_open')}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span aria-hidden className="relative block h-3 w-4">
+          <span className={`absolute left-0 h-0.5 w-4 rounded bg-current transition-transform duration-300 ${open ? 'top-1.5 rotate-45' : 'top-0'}`} />
+          <span className={`absolute left-0 top-1.5 h-0.5 w-4 rounded bg-current transition-opacity duration-200 ${open ? 'opacity-0' : ''}`} />
+          <span className={`absolute left-0 h-0.5 w-4 rounded bg-current transition-transform duration-300 ${open ? 'top-1.5 -rotate-45' : 'top-3'}`} />
+        </span>
+      </button>
+
       {open && (
-        <div id="mobile-menu" className="menu-in fixed inset-0 z-40 overflow-y-auto bg-graphite-950 px-6 pb-10 pt-28 lg:hidden">
+        <div id="mobile-menu" className="menu-in fixed inset-0 z-40 overflow-y-auto bg-graphite-950 px-6 pb-10 pt-28 xl:hidden">
           <nav aria-label={t('nav.label')}>
             <ol className="flex flex-col">
               {LINKS.map((id, i) => (

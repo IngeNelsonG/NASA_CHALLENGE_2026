@@ -4,7 +4,7 @@ import { Segmented } from '@/components/ui';
 import { gibsImage, IMAGE_VIEWS, imageSensor, SENSOR_LABEL, worldviewUrl, type ImageSensor, type ImageView } from '@/lib/gibs';
 import { dayIdx, isoDay, todayIso } from '@/lib/geo';
 import { mainBox } from '@/lib/shape';
-import { timelineRange, useStore } from '@/store';
+import { timelineRange, useAoiName, useStore } from '@/store';
 import { useData } from '@/store/data';
 
 /**
@@ -16,6 +16,7 @@ export function SatelliteImage() {
   const t = useT();
   const lang = useStore((s) => s.lang);
   const aoi = useStore((s) => s.aoi);
+  const aoiName = useAoiName();
   const date = useStore((s) => s.date);
   const granularity = useStore((s) => s.granularity);
   const peakDay = useData((s) => s.hotspots?.peakDay ?? null);
@@ -66,7 +67,7 @@ export function SatelliteImage() {
           src={img.url}
           width={img.width}
           height={img.height}
-          alt={t(`satimg.alt_${view}`, { place: aoi.name, day: fmtDay(day, lang) })}
+          alt={t(`satimg.alt_${view}`, { place: aoiName, day: fmtDay(day, lang) })}
           loading="lazy"
           decoding="async"
           onLoad={() => setLoaded({ url: img.url, ok: true })}

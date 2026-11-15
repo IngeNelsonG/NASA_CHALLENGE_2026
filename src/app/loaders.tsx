@@ -8,7 +8,7 @@ import { simClock } from '@/lib/simClock';
 import type { Resolution } from '@/lib/types';
 import { callWorker } from '@/lib/worker-client';
 import { view } from '@/scenes/view';
-import { timelineRange, useStore } from '@/store';
+import { isWorld, timelineRange, useStore } from '@/store';
 import { useData } from '@/store/data';
 
 /** First day of the month `k` months away from `date`. */
@@ -33,6 +33,8 @@ export function DataLoaders() {
   const aoi = useStore((s) => s.aoi);
   const date = useStore((s) => s.date);
   const granularity = useStore((s) => s.granularity);
+  // nothing selected: no outline and no points (the whole planet would be far too many)
+  const world = isWorld(aoi);
 
   const timeScale = useStore((s) => s.timeScale);
   useEffect(() => {
@@ -68,11 +70,11 @@ export function DataLoaders() {
       }
       return null;
     },
-    enabled: phase === 'landing',
+    enabled: phase === 'landing' && !world,
     staleTime: Infinity,
   });
-  const shapeReady = outline.isFetched;
-  const shape = outline.data ?? null;
+  const shapeReady = outline.isFetched || world;
+  const shape = world ? null : outline.data ?? null;
   useEffect(() => {
     if (!shapeReady) return;
     useData.setState({ shape, shapeFor: aoi.id });
@@ -83,10 +85,10 @@ export function DataLoaders() {
   const coverage = useQuery({
     queryKey: ['coverage', aoi.bbox.join(','), range.from, range.to],
     queryFn: ({ signal }) => api.hotspotsCoverage({ bbox: aoi.bbox, ...range }, signal),
-    enabled: phase === 'landing',
+    enabled: phase === 'landing' && !world,
     placeholderData: keepPreviousData,
   });
-  useEffect(() => useData.setState({ coverage: coverage.data ?? null }), [coverage.data]);
+  useEffect(() => useData.setState({ coverage: world ? null : coverage.data ?? null }), [coverage.data, world]);
 
   // When the AOI changes, park the timeline on its most recent peak month so the globe is not empty.
   const monthly = useCalendar('month', phase === 'landing');
@@ -114,14 +116,14 @@ export function DataLoaders() {
     queryKey: ['hotspots', aoi.id, aoi.bbox.join(','), range.from, range.to, !!shape],
     queryFn: () => callWorker('hotspots', { bbox: aoi.bbox, from: range.from, to: range.to, track: true, rings: ringsOf(shape) }),
     // wait for the outline so the points are clipped once, not fetched twice
-    enabled: phase === 'landing' && shapeReady && (parkedFor === aoi.id || monthly.isError),
+    enabled: phase === 'landing' && !world && shapeReady && (parkedFor === aoi.id || monthly.isError),
     placeholderData: keepPreviousData,
     gcTime: 60_000,
   });
   useEffect(() => {
-    useData.setState({ hotspots: hot.data ?? null, hotspotsLoading: hot.isFetching });
+    useData.setState({ hotspots: world ? null : hot.data ?? null, hotspotsLoading: !world && hot.isFetching });
     view.kick();
-  }, [hot.data, hot.isFetching]);
+  }, [hot.data, hot.isFetching, world]);
 
   // Outside Colombia the points come live from NASA FIRMS (slow): once this period is shown, ask the
   // server to download the neighbouring ones in the background, so stepping or playing is instant.

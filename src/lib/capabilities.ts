@@ -16,23 +16,3 @@ export function canUse3D(): boolean {
   }
 }
 
-/** GPUs that struggle with a full-screen globe at high pixel density (integrated or software). */
-const WEAK_GPU = /Intel.*(HD|UHD) Graphics|Mali|Adreno \(TM\) [1-6]\d\d|PowerVR|SwiftShader|llvmpipe|Basic Render/i;
-
-/**
- * First guess of whether this device should start the globe in light mode: few cores or little
- * memory, the browser's data saver, or a weak GPU. The frame-time monitor can still switch later.
- */
-export function detectLowTier(): boolean {
-  try {
-    const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
-    if ((nav.hardwareConcurrency ?? 8) <= 4 || (nav.deviceMemory ?? 8) <= 4 || nav.connection?.saveData) return true;
-    const gl = document.createElement('canvas').getContext('webgl2');
-    const info = gl?.getExtension('WEBGL_debug_renderer_info');
-    const gpu = gl && info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : '';
-    gl?.getExtension('WEBGL_lose_context')?.loseContext();
-    return WEAK_GPU.test(gpu);
-  } catch {
-    return false;
-  }
-}

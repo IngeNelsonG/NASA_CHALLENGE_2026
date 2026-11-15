@@ -4,9 +4,10 @@ import { RollText, Sparkle } from '@/components/ui';
 import { binStart } from '@/features/calendar/CalendarCanvas';
 import { APP_NAME, USE_MOCKS } from '@/lib/env';
 import { downloadCsv } from '@/lib/worker-client';
-import { timelineRange, useStore } from '@/store';
+import { timelineRange, useAoiName, useStore } from '@/store';
 import { useData } from '@/store/data';
 import { SECTIONS } from './OrbitNav';
+import { USTA_URL } from './Team';
 
 type SourceNote = 'data.src_firms' | 'data.src_gibs' | 'data.src_conae' | 'data.src_tle' | 'data.src_ne' | 'data.src_bm';
 const SOURCES: { name: string; href: string; note: SourceNote }[] = [
@@ -23,6 +24,7 @@ const TEAM_URL = 'https://www.spaceappschallenge.org/2026/find-a-team/ustacode1/
 export function Footer() {
   const t = useT();
   const aoi = useStore((s) => s.aoi);
+  const aoiName = useAoiName();
   const resolution = useStore((s) => s.resolution);
   const calRange = useStore((s) => s.calRange);
   const date = useStore((s) => s.date);
@@ -45,7 +47,9 @@ export function Footer() {
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-dim">{t('footer.about')}</p>
             <div className="mt-6 flex items-center gap-5">
               <img src={`${base}brand/space-apps-logo.png`} alt="NASA Space Apps Challenge" width={440} height={172} loading="lazy" className="h-auto w-36" />
-              <img src={`${base}brand/usta-logo.png`} alt="Universidad Santo Tomás" width={280} height={280} loading="lazy" className="h-14 w-14 rounded-full bg-white object-cover" />
+              <a href={USTA_URL} target="_blank" rel="noreferrer" title="santototunja.edu.co" className="shrink-0 rounded-full transition-transform duration-300 hover:scale-105">
+                <img src={`${base}brand/usta-logo.png`} alt="Universidad Santo Tomás (santototunja.edu.co)" width={280} height={280} loading="lazy" className="h-14 w-14 rounded-full bg-white object-cover" />
+              </a>
             </div>
             <a href={TEAM_URL} target="_blank" rel="noreferrer" className="tap mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-ink underline-offset-4 hover:underline">
               {t('footer.team')} <span aria-hidden>↗</span>
@@ -77,7 +81,7 @@ export function Footer() {
                 className="btn justify-between text-left"
                 onClick={() => void downloadCsv({ kind: 'calendar', key: calendarKey(aoi.id, resolution), from: binStart(calRange.from, resolution), to: calRange.to }, `calendar_${slug}_${resolution}_${calRange.from}_${calRange.to}.csv`)}
               >
-                <span className="min-w-0 truncate">{t('data.csv_calendar', { aoi: aoi.name })}</span>
+                <span className="min-w-0 truncate">{t('data.csv_calendar', { aoi: aoiName })}</span>
                 <span className="shrink-0 text-xs text-ink-dim">CSV ↓</span>
               </button>
               <button type="button" className="btn justify-between text-left" disabled={!count} onClick={() => void downloadCsv({ kind: 'hotspots' }, `hotspots_${slug}_${range.from}_${range.to}.csv`)}>

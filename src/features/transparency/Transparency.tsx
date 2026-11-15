@@ -1,27 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { useT, type Key } from '@/app/i18n';
 import { useCalendar } from '@/app/loaders';
-import { SectionHeading } from '@/components/ui';
+import { Formula, Frac, Fn, Op, Paren, Sub, Sup, V } from '@/components/math';
+import { Reveal, SectionHeading } from '@/components/ui';
 import { api } from '@/lib/api';
 import { CHART, SENSOR_COLOR, SEV_COLOR } from '@/lib/colors';
 import { fmtDec, fmtInt, fmtRatio, fmtSigma, fmtSigned, fmtTempC } from '@/lib/format';
-import { useStore } from '@/store';
+import { useAoiName, useStore } from '@/store';
 
 const DATASET_LABEL: Record<string, Key> = {
   'firms-archive': 'trans.dataset_firms_archive',
   'firms-global-monthly': 'trans.dataset_firms_global',
   'synthetic-sample': 'trans.dataset_synthetic',
 };
-
-const METHOD_ITEMS: { n: string; title: Key; eq?: Key; body: Key }[] = [
-  { n: '01', title: 'trans.s1_t', eq: 'trans.s1_eq', body: 'trans.s1_b' },
-  { n: '02', title: 'trans.s2_t', eq: 'trans.s2_eq', body: 'trans.s2_b' },
-  { n: '03', title: 'trans.s3_t', eq: 'trans.s3_eq', body: 'trans.s3_b' },
-  { n: '04', title: 'trans.s4_t', eq: 'trans.s4_eq', body: 'trans.s4_b' },
-  { n: '05', title: 'trans.s5_t', eq: 'trans.s5_eq', body: 'trans.s5_b' },
-  { n: '06', title: 'trans.life_title', body: 'trans.life_b' },
-];
 
 /** Exact Planck spectral radiance shape B(lambda_um, T_kelvin) normalized to [0, 1] per curve. */
 function planckCurvePath(tempK: number, w: number, h: number, padX: number, padY: number): string {
@@ -71,29 +63,26 @@ function PlanckWienDiagram() {
   ];
 
   return (
-    <div className="panel p-4 sm:p-6">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h3 className="text-lg font-semibold text-ink">{t('trans.wien_title')}</h3>
-          <p className="mt-1 text-xs leading-relaxed text-ink-dim">{t('trans.wien_lead')}</p>
+    <div className="panel p-5 sm:p-7 lg:p-8">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+        <div className="max-w-2xl">
+          <h3 className="font-display text-2xl font-light leading-tight text-cream sm:text-3xl">{t('trans.wien_title')}</h3>
+          <p className="mt-2 text-sm leading-relaxed text-ink-dim">{t('trans.wien_lead')}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs text-ink-dim">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-ink-dim">
           <span className="flex items-center gap-1.5">
-            <i aria-hidden className="inline-block h-0.5 w-4 bg-modis" /> 800 K (λ_max = {fmtDec(3.62, lang, 2)} µm)
+            <i aria-hidden className="inline-block h-0.5 w-4 bg-modis" /> 800 K · <V>λ</V>
+            <Sub>max</Sub> = {fmtDec(3.62, lang, 2)} µm
           </span>
           <span className="flex items-center gap-1.5">
-            <i aria-hidden className="inline-block h-0.5 w-4 bg-viirs" /> 300 K (λ_max = {fmtDec(9.66, lang, 2)} µm)
+            <i aria-hidden className="inline-block h-0.5 w-4 bg-viirs" /> 300 K · <V>λ</V>
+            <Sub>max</Sub> = {fmtDec(9.66, lang, 2)} µm
           </span>
         </div>
       </div>
 
       <div className="overflow-x-auto">
-        <svg
-          viewBox={`0 0 ${w} ${h}`}
-          className="w-full min-w-[540px]"
-          role="img"
-          aria-label={t('trans.wien_title')}
-        >
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-w-[540px]" role="img" aria-label={t('trans.wien_title')}>
           <rect
             x={lamToX(3.5, w, padX)}
             y={padY - 4}
@@ -112,41 +101,306 @@ function PlanckWienDiagram() {
               <g key={b.label}>
                 <line x1={x} y1={yLabel + 4} x2={x} y2={h - padY} stroke={b.color} strokeWidth="1.2" strokeDasharray="3 3" opacity="0.85" />
                 <circle cx={x} cy={h - padY} r="3" fill={b.color} />
-                <text
-                  x={b.lam < 5 ? x + 6 : x - 6}
-                  y={yLabel}
-                  textAnchor={b.lam < 5 ? 'start' : 'end'}
-                  fill={b.color}
-                  className="font-mono text-xs"
-                >
+                <text x={b.lam < 5 ? x + 6 : x - 6} y={yLabel} textAnchor={b.lam < 5 ? 'start' : 'end'} fill={b.color} className="font-mono text-xs">
                   {b.label}
                 </text>
               </g>
             );
           })}
 
-          <path d={bgPath} fill="none" stroke={SENSOR_COLOR.viirs} strokeWidth="2.2" />
-          <path d={firePath} fill="none" stroke={SENSOR_COLOR.modis} strokeWidth="2.5" />
+          <path d={bgPath} fill="none" stroke={SENSOR_COLOR.viirs} strokeWidth="2" />
+          <path d={firePath} fill="none" stroke={SENSOR_COLOR.modis} strokeWidth="2" />
 
-          {[2, 4, 6, 8, 10, 12, 14].map((tick) => {
-            const x = lamToX(tick, w, padX);
-            return (
-              <text key={tick} x={x} y={h - padY + 18} textAnchor="middle" className="fill-ink-mute font-mono text-xs">
-                {tick} µm
-              </text>
-            );
-          })}
+          {[2, 4, 6, 8, 10, 12, 14].map((tick) => (
+            <text key={tick} x={lamToX(tick, w, padX)} y={h - padY + 18} textAnchor="middle" className="fill-ink-mute font-mono text-xs">
+              {tick} µm
+            </text>
+          ))}
         </svg>
       </div>
-      <p className="mt-2 text-xs leading-relaxed text-ink-mute">{t('trans.wien_caption')}</p>
+      <p className="mt-3 text-xs leading-relaxed text-ink-mute">{t('trans.wien_caption')}</p>
+    </div>
+  );
+}
+
+/* ---- formulas, typeset (language-independent) ---- */
+
+const s = (base: ReactNode, sub: ReactNode) => (
+  <>
+    <V>{base}</V>
+    <Sub>{sub}</Sub>
+  </>
+);
+
+const F_PLANCK = (
+  <>
+    <V>B</V>(<V>λ</V>, <V>T</V>)<Op>=</Op>
+    <Frac
+      n={
+        <>
+          2<V>hc</V>
+          <Sup>2</Sup>
+        </>
+      }
+      d={
+        <>
+          <V>λ</V>
+          <Sup>5</Sup>
+        </>
+      }
+    />
+    <Op>·</Op>
+    <Frac
+      n="1"
+      d={
+        <>
+          <V>e</V>
+          <Sup>
+            <V>hc</V> / <V>λ</V>
+            <V>k</V>
+            <Sub>B</Sub>
+            <V>T</V>
+          </Sup>
+          <Op>−</Op>1
+        </>
+      }
+    />
+  </>
+);
+const F_WIEN = (
+  <>
+    {s('λ', 'max')}
+    <Op>=</Op>
+    <Frac n="2897.8 µm·K" d={<V>T</V>} />
+  </>
+);
+const F_FRP = (
+  <>
+    <V>FRP</V>
+    <Op>=</Op>
+    <Frac n={<V>σ</V>} d={<V>a</V>} />
+    <Fn>Σ</Fn>
+    <Paren>
+      {s('L', 'MIR')}
+      <Op>−</Op>
+      {s('L', 'bg')}
+    </Paren>
+  </>
+);
+const F_SHRINK = (
+  <>
+    <V>w</V>
+    <Op>=</Op>
+    <Frac n={<V>n</V>} d={<>
+      <V>n</V> + 24
+    </>} />
+    <span className="mx-3 text-ink-mute">,</span>
+    {s('k', 'post')}
+    <Op>=</Op>
+    <V>w</V> {s('k', 'obs')}
+    <Op>+</Op>
+    <Paren>
+      1<Op>−</Op>
+      <V>w</V>
+    </Paren>
+    {s('k', 'prior')}
+  </>
+);
+const F_BLEND = (
+  <>
+    <V>H</V>
+    <Op>=</Op>
+    <Frac
+      n={
+        <>
+          {s('w', 'M')} <V>M</V>
+          <Op>+</Op>
+          {s('w', 'V')} <V>V</V> / <V>k</V>
+        </>
+      }
+      d={
+        <>
+          {s('w', 'M')}
+          <Op>+</Op>
+          {s('w', 'V')}
+        </>
+      }
+    />
+  </>
+);
+const F_LOG = (
+  <>
+    <V>Y</V>(<V>t</V>)<Op>=</Op>
+    <Fn>ln</Fn>
+    <Paren>
+      1<Op>+</Op>
+      <V>H</V>(<V>t</V>)
+    </Paren>
+  </>
+);
+const F_Z = (
+  <>
+    <V>z</V>(<V>t</V>)<Op>=</Op>
+    <Frac
+      n={
+        <>
+          <V>Y</V>(<V>t</V>)<Op>−</Op>
+          {s('μ', 's')}(<V>m</V>)
+        </>
+      }
+      d={
+        <>
+          <Fn>max</Fn>({s('σ', 's')}(<V>m</V>), 0.25)
+        </>
+      }
+    />
+  </>
+);
+const F_MAD = (
+  <>
+    {s('MAD', 'm')}
+    <Op>=</Op>1.4826<Op>·</Op>
+    <Fn>median</Fn>
+    <span className="mx-[0.15em]">|</span>
+    <V>X</V>
+    <Op>−</Op>
+    {s('M', 'm')}
+    <span className="mx-[0.15em]">|</span>
+  </>
+);
+const F_ROBUST = (
+  <>
+    {s('z', 'rob')}
+    <Op>=</Op>
+    <Frac
+      n={
+        <>
+          <V>X</V>
+          <Op>−</Op>
+          {s('M', 'm')}
+        </>
+      }
+      d={
+        <>
+          <Fn>max</Fn>({s('MAD', 'm')}, <V>IQR</V> / 1.349, 1)
+        </>
+      }
+    />
+  </>
+);
+
+/** Step 5 as a readable rule: two groups of conditions, both needed for CRITICAL. */
+function DecisionRule() {
+  const t = useT();
+  const group = (title: Key, items: ReactNode[]) => (
+    <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-graphite-950/70 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-mute">{t(title)}</p>
+      <ul className="mt-3 flex flex-wrap gap-1.5">
+        {items.map((it, i) => (
+          <li key={i} className="rounded-full border border-line bg-graphite-800 px-2.5 py-1 text-xs text-ink">
+            {it}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+  return (
+    <div role="group" aria-label={t('trans.s5_t')}>
+      <div className="flex flex-col items-stretch gap-2">
+        {group('trans.rule_int', [
+          <>
+            <V>z</V> ≥ 2.5
+          </>,
+          t('trans.c_ratio'),
+          t('trans.c_nrt'),
+        ])}
+        <span aria-hidden className="self-center font-display text-xl leading-none text-ink-mute">∧</span>
+        {group('trans.rule_ctx', [t('trans.c_persist'), t('trans.c_accel'), t('trans.c_unseasonal'), t('trans.c_nino')])}
+      </div>
+      <p className="mt-3 flex items-center gap-2 text-xs font-semibold text-ink">
+        <i aria-hidden className="h-2 w-2 rounded-full" style={{ background: SEV_COLOR.critical }} />
+        {t('trans.rule_then')}
+      </p>
+    </div>
+  );
+}
+
+const METHOD_ITEMS: { n: string; title: Key; body: Key; formulas?: { label: string; node: ReactNode }[]; extra?: 'rule' }[] = [
+  {
+    n: '01',
+    title: 'trans.s1_t',
+    body: 'trans.s1_b',
+    formulas: [
+      { label: 'B(λ,T) = (2hc²/λ⁵) / (exp(hc/λk_B T) − 1)', node: F_PLANCK },
+      { label: 'λ_max = 2897.8 µm·K / T', node: F_WIEN },
+      { label: 'FRP = (σ/a) Σ (L_MIR − L_bg)', node: F_FRP },
+    ],
+  },
+  {
+    n: '02',
+    title: 'trans.s2_t',
+    body: 'trans.s2_b',
+    formulas: [
+      { label: 'w = n/(n+24), k_post = w k_obs + (1−w) k_prior', node: F_SHRINK },
+      { label: 'H = (w_M M + w_V V/k) / (w_M + w_V)', node: F_BLEND },
+    ],
+  },
+  {
+    n: '03',
+    title: 'trans.s3_t',
+    body: 'trans.s3_b',
+    formulas: [
+      { label: 'Y(t) = ln(1 + H(t))', node: F_LOG },
+      { label: 'z(t) = (Y(t) − μ_s(m)) / max(σ_s(m), 0.25)', node: F_Z },
+    ],
+  },
+  {
+    n: '04',
+    title: 'trans.s4_t',
+    body: 'trans.s4_b',
+    formulas: [
+      { label: 'MAD_m = 1.4826 median|X − M_m|', node: F_MAD },
+      { label: 'z_rob = (X − M_m) / max(MAD_m, IQR/1.349, 1)', node: F_ROBUST },
+    ],
+  },
+  { n: '05', title: 'trans.s5_t', body: 'trans.s5_b', extra: 'rule' },
+  { n: '06', title: 'trans.life_title', body: 'trans.life_b' },
+];
+
+/** Folded detail under a method card: closed by default so the section reads as text first. */
+function Fold({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
+  return (
+    <details className="group/fold mt-5 rounded-xl border border-line transition-colors open:bg-graphite-950/40">
+      <summary className="tap flex cursor-pointer list-none items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
+        <span aria-hidden className="font-display text-base leading-none text-accent">
+          ∑
+        </span>
+        {label}
+        {count != null && <span className="data rounded-full border border-line px-1.5 text-[11px] font-normal leading-4 text-ink-mute">{count}</span>}
+        <span aria-hidden className="ml-auto text-xs text-ink-mute transition-transform duration-300 group-open/fold:rotate-180">
+          ▾
+        </span>
+      </summary>
+      <div className="fade-in px-3 pb-3 sm:px-4 sm:pb-4">{children}</div>
+    </details>
+  );
+}
+
+function Stat({ label, value, sub }: { label: string; value: ReactNode; sub: ReactNode }) {
+  return (
+    <div className="panel flex flex-col p-5 sm:p-6">
+      <dt className="text-xs leading-snug text-ink-dim">{label}</dt>
+      <dd className="data mt-4 text-3xl font-semibold leading-none text-cream">{value}</dd>
+      <dd className="data mt-3 border-t border-line pt-3 text-xs leading-relaxed text-ink-mute">{sub}</dd>
     </div>
   );
 }
 
 export function Transparency() {
   const t = useT();
-  const lang = useStore((s) => s.lang);
-  const aoi = useStore((s) => s.aoi);
+  const lang = useStore((st) => st.lang);
+  const aoi = useStore((st) => st.aoi);
+  const aoiName = useAoiName();
   const monthly = useCalendar('month');
   const alertQ = useQuery({
     queryKey: ['alerts', aoi.id],
@@ -158,156 +412,172 @@ export function Transparency() {
 
   return (
     <section id="transparency" className="section" aria-labelledby="transparency-title">
-      <SectionHeading
-        id="transparency-title"
-        eyebrow={t('trans.eyebrow')}
-        title={t('trans.title')}
-        lead={t('trans.lead', { aoi: aoi.name })}
-      />
+      <SectionHeading id="transparency-title" eyebrow={t('trans.eyebrow')} title={t('trans.title')} lead={t('trans.lead', { aoi: aoiName })} />
 
-      {/* Lead with the live audit as 4 big numbers in a row */}
-      <div className="mb-10">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 pb-4">
-          <h3 className="text-base font-semibold text-ink">
-            {t('trans.live_title')} <span className="font-display text-lg font-normal">{aoi.name}</span>
-          </h3>
-          {meta?.dataset && (
-            <span className="chip">
-              {DATASET_LABEL[meta.dataset] ? t(DATASET_LABEL[meta.dataset]) : meta.dataset}
+      {/* live audit for the selected area */}
+      <Reveal>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-base font-semibold text-ink">
+            <span className="chip !border-sev-normal/60 !bg-graphite-800 !text-cream">
+              <span aria-hidden className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sev-normal opacity-60 motion-reduce:hidden" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-sev-normal" />
+              </span>
+              {t('trans.live_badge')}
             </span>
-          )}
+            {t('trans.live_title')} <span className="font-display text-xl font-normal">{aoiName}</span>
+          </h3>
+          {meta?.dataset && <span className="chip">{DATASET_LABEL[meta.dataset] ? t(DATASET_LABEL[meta.dataset]) : meta.dataset}</span>}
         </div>
-        <dl className="grid gap-6 border-y border-line py-6 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="text-xs text-ink-mute">{t('trans.live_ratio')}</dt>
-            <dd className="data mt-2 text-2xl font-semibold text-ink sm:text-3xl">
-              {meta?.ratio != null ? fmtRatio(meta.ratio, lang, 3) : '—'}
-            </dd>
-            <dd className="data mt-1 text-xs text-ink-dim">
-              {meta?.overlapMonths != null
-                ? meta.overlapMonths === 0
-                  ? t('trans.no_overlap')
-                  : meta.overlapMonths === 1
-                    ? t('trans.overlap_1')
-                    : t('trans.overlap_n', { n: fmtInt(meta.overlapMonths, lang) })
-                : '—'}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-ink-mute">{t('trans.live_z')}</dt>
-            <dd className="data mt-2 text-2xl font-semibold text-ink sm:text-3xl">
-              {alert ? fmtSigma(alert.z_score, lang, 2) : '—'}
-            </dd>
-            <dd className="data mt-1 text-xs text-ink-dim">
-              {alert ? t('trans.robust_z_eq', { val: fmtSigned(alert.robust_z, lang, 2) }) : '—'}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-ink-mute">{t('trans.live_clim')}</dt>
-            <dd className="data mt-2 text-2xl font-semibold text-ink sm:text-3xl">
-              {alert ? fmtInt(Math.round(alert.climatology_median), lang) : '—'}
-              {alert && <span className="ml-1.5 text-xs font-normal text-ink-dim">{t('trans.modis_eq')}</span>}
-            </dd>
-            <dd className="data mt-1 text-xs text-ink-dim">
-              {alert
-                ? `${t('trans.iqr_label')} ${fmtInt(Math.round(alert.climatology_q25), lang)}–${fmtInt(Math.round(alert.climatology_q75), lang)} · p90 ${fmtInt(Math.round(alert.climatology_p90), lang)}`
-                : '—'}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-ink-mute">{t('trans.live_oni')}</dt>
-            <dd className="data mt-2 text-2xl font-semibold text-ink sm:text-3xl">
-              {alert ? t(`enso.phase_${alert.enso_phase}` as Key) : '—'}
-              {alert?.oni_value != null && (
-                <span className="ml-1.5 text-sm font-normal text-ink-dim">({fmtTempC(alert.oni_value, lang, 2)})</span>
-              )}
-            </dd>
-            <dd className="data mt-1 text-xs text-ink-dim">
-              {alert
-                ? t('trans.persist_status', {
-                    count:
-                      alert.persistence_months === 1
-                        ? t('anom.alert_month_1')
-                        : t('anom.alert_months_n', { n: fmtInt(alert.persistence_months, lang) }),
-                    trend: t(`anom.alert_trend_${alert.trend_direction}` as Key),
-                  })
-                : '—'}
-            </dd>
-          </div>
-        </dl>
+      </Reveal>
+      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat
+          label={t('trans.live_ratio')}
+          value={meta?.ratio != null ? fmtRatio(meta.ratio, lang, 3) : '—'}
+          sub={
+            meta?.overlapMonths != null
+              ? meta.overlapMonths === 0
+                ? t('trans.no_overlap')
+                : meta.overlapMonths === 1
+                  ? t('trans.overlap_1')
+                  : t('trans.overlap_n', { n: fmtInt(meta.overlapMonths, lang) })
+              : '—'
+          }
+        />
+        <Stat
+          label={t('trans.live_z')}
+          value={alert ? fmtSigma(alert.z_score, lang, 2) : '—'}
+          sub={alert ? t('trans.robust_z_eq', { val: fmtSigned(alert.robust_z, lang, 2) }) : '—'}
+        />
+        <Stat
+          label={t('trans.live_clim')}
+          value={
+            alert ? (
+              <>
+                {fmtInt(Math.round(alert.climatology_median), lang)}
+                <span className="ml-1.5 text-xs font-normal text-ink-dim">{t('trans.modis_eq')}</span>
+              </>
+            ) : (
+              '—'
+            )
+          }
+          sub={
+            alert
+              ? `${t('trans.iqr_label')} ${fmtInt(Math.round(alert.climatology_q25), lang)}–${fmtInt(Math.round(alert.climatology_q75), lang)} · p90 ${fmtInt(Math.round(alert.climatology_p90), lang)}`
+              : '—'
+          }
+        />
+        <Stat
+          label={t('trans.live_oni')}
+          value={
+            alert ? (
+              <>
+                {t(`enso.phase_${alert.enso_phase}` as Key)}
+                {alert.oni_value != null && <span className="ml-1.5 text-sm font-normal text-ink-dim">({fmtTempC(alert.oni_value, lang, 2)})</span>}
+              </>
+            ) : (
+              '—'
+            )
+          }
+          sub={
+            alert
+              ? t('trans.persist_status', {
+                  count: alert.persistence_months === 1 ? t('anom.alert_month_1') : t('anom.alert_months_n', { n: fmtInt(alert.persistence_months, lang) }),
+                  trend: t(`anom.alert_trend_${alert.trend_direction}` as Key),
+                })
+              : '—'
+          }
+        />
+      </dl>
+
+      <div className="mt-12 lg:mt-16">
+        <Reveal>
+          <PlanckWienDiagram />
+        </Reveal>
       </div>
 
-      {/* Planck Radiative Physics chart */}
-      <PlanckWienDiagram />
-
-      {/* Method items as a clean accordion (first one open, thin dividers, no boxes) */}
-      <div className="mt-10 divide-y divide-line border-y border-line">
-        {METHOD_ITEMS.map((c, idx) => (
-          <details key={c.n} open={idx === 0} className="group py-4">
-            <summary className="tap flex cursor-pointer list-none items-center justify-between gap-4 py-1 text-left [&::-webkit-details-marker]:hidden">
-              <span className="flex items-baseline gap-3">
-                <span className="data text-xs text-ink-mute">{c.n}</span>
-                <span className="text-base font-semibold text-ink sm:text-lg">{t(c.title).replace(/^\d+\.\s*/, '')}</span>
-              </span>
-              <span aria-hidden className="shrink-0 text-sm text-ink-mute transition-transform duration-200 group-open:rotate-180">
-                ▾
-              </span>
-            </summary>
-            <div className="mt-3 space-y-3 sm:pl-7">
-              <p className="text-sm leading-relaxed text-ink-dim">{t(c.body)}</p>
-              {c.eq && (
-                <p className="data overflow-x-auto rounded-lg border border-line bg-cream-deep/70 p-3 text-xs leading-relaxed text-ink">
-                  {t(c.eq)}
-                </p>
-              )}
-            </div>
-          </details>
-        ))}
+      {/* the method, step by step: the idea in words, its formulas folded underneath */}
+      <div id="transparency-method" className="mt-14 scroll-mt-6 lg:mt-20">
+        <Reveal className="flex items-baseline justify-between gap-4 border-b border-line pb-4">
+          <h3 className="font-display text-3xl font-light text-ink sm:text-4xl">{t('trans.method_title')}</h3>
+          <span className="data text-sm text-ink-mute">{String(METHOD_ITEMS.length).padStart(2, '0')}</span>
+        </Reveal>
+        <ol className="mt-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-2 lg:gap-5">
+          {METHOD_ITEMS.map((c, i) => (
+            <li key={c.n}>
+              <Reveal delay={(i % 2) * 90}>
+                <article className="panel flex flex-col p-5 sm:p-7">
+                  <header className="flex items-baseline gap-4">
+                    <span aria-hidden className="font-display text-3xl font-light leading-none text-accent">
+                      {c.n}
+                    </span>
+                    <h4 className="text-lg font-semibold leading-snug text-cream">{t(c.title).replace(/^\d+\.\s*/, '')}</h4>
+                  </header>
+                  <p className="mt-3 text-sm leading-relaxed text-ink-dim">{t(c.body)}</p>
+                  {c.formulas && (
+                    <Fold label={t('trans.formulas')} count={c.formulas.length}>
+                      <div className="flex flex-col gap-2.5">
+                        {c.formulas.map((f) => (
+                          <Formula key={f.label} label={f.label}>
+                            {f.node}
+                          </Formula>
+                        ))}
+                      </div>
+                    </Fold>
+                  )}
+                  {c.extra === 'rule' && (
+                    <Fold label={t('trans.rule')}>
+                      <DecisionRule />
+                    </Fold>
+                  )}
+                </article>
+              </Reveal>
+            </li>
+          ))}
+        </ol>
       </div>
 
-      {/* GOES-16 / 18 / 19 ABI & NASA FIRMS Sensor Table */}
-      <article className="panel mt-10 p-5 sm:p-6">
-        <h3 className="text-lg font-semibold text-ink">{t('trans.goes_title')}</h3>
-        <p className="mt-1 text-sm leading-relaxed text-ink-dim">{t('trans.goes_lead')}</p>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-line text-xs uppercase tracking-wider text-ink-mute">
-                <th className="py-2 pr-4">{t('trans.goes_col_sensor')}</th>
-                <th className="py-2 pr-4">{t('trans.goes_col_band')}</th>
-                <th className="py-2 pr-4">{t('trans.goes_col_res')}</th>
-                <th className="py-2">{t('trans.goes_col_role')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line/60 text-ink-dim">
-              <tr>
-                <td className="py-2.5 pr-4 font-semibold text-modis">MODIS Terra / Aqua (MCD14ML)</td>
-                <td className="data whitespace-nowrap py-2.5 pr-4">{t('trans.goes_r1_band')}</td>
-                <td className="data whitespace-nowrap py-2.5 pr-4">{t('trans.goes_r1_res')}</td>
-                <td className="min-w-[16rem] whitespace-normal py-2.5">{t('trans.goes_r1_role')}</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 pr-4 font-semibold text-viirs">VIIRS S-NPP / NOAA-20 / NOAA-21</td>
-                <td className="data whitespace-nowrap py-2.5 pr-4">{t('trans.goes_r2_band')}</td>
-                <td className="data whitespace-nowrap py-2.5 pr-4">{t('trans.goes_r2_res')}</td>
-                <td className="min-w-[16rem] whitespace-normal py-2.5">{t('trans.goes_r2_role')}</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 pr-4 font-semibold text-sev-normal">{t('trans.goes_r3_name')}</td>
-                <td className="data whitespace-nowrap py-2.5 pr-4">{t('trans.goes_r3_band')}</td>
-                <td className="data whitespace-nowrap py-2.5 pr-4">{t('trans.goes_r3_res')}</td>
-                <td className="min-w-[16rem] whitespace-normal py-2.5">{t('trans.goes_r3_role')}</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 pr-4 font-semibold text-sev-watch">{t('trans.goes_r4_name')}</td>
-                <td className="data whitespace-nowrap py-2.5 pr-4">{t('trans.goes_r4_band')}</td>
-                <td className="data whitespace-nowrap py-2.5 pr-4">{t('trans.goes_r4_res')}</td>
-                <td className="min-w-[16rem] whitespace-normal py-2.5">{t('trans.goes_r4_role')}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </article>
+      {/* GOES-16 / 18 / 19 ABI & NASA FIRMS sensor table */}
+      <Reveal className="mt-14 lg:mt-20">
+        <article className="panel p-5 sm:p-7">
+          <h3 className="font-display text-2xl font-light leading-tight text-cream sm:text-3xl">{t('trans.goes_title')}</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ink-dim">{t('trans.goes_lead')}</p>
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs uppercase tracking-wider text-ink-mute">
+                  <th className="py-2.5 pr-4 font-semibold">{t('trans.goes_col_sensor')}</th>
+                  <th className="py-2.5 pr-4 font-semibold">{t('trans.goes_col_band')}</th>
+                  <th className="py-2.5 pr-4 font-semibold">{t('trans.goes_col_res')}</th>
+                  <th className="py-2.5 font-semibold">{t('trans.goes_col_role')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line text-ink-dim">
+                {(
+                  [
+                    { name: 'MODIS Terra / Aqua (MCD14ML)', color: SENSOR_COLOR.modis, k: 'r1' },
+                    { name: 'VIIRS S-NPP / NOAA-20 / NOAA-21', color: SENSOR_COLOR.viirs, k: 'r2' },
+                    { name: t('trans.goes_r3_name'), color: SEV_COLOR.normal, k: 'r3' },
+                    { name: t('trans.goes_r4_name'), color: SEV_COLOR.watch, k: 'r4' },
+                  ] as const
+                ).map((r) => (
+                  <tr key={r.k} className="align-top">
+                    <td className="py-3 pr-4 font-semibold text-ink">
+                      <span className="flex items-start gap-2">
+                        <i aria-hidden className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: r.color }} />
+                        {r.name}
+                      </span>
+                    </td>
+                    <td className="data whitespace-nowrap py-3 pr-4">{t(`trans.goes_${r.k}_band` as Key)}</td>
+                    <td className="data whitespace-nowrap py-3 pr-4">{t(`trans.goes_${r.k}_res` as Key)}</td>
+                    <td className="min-w-[16rem] py-3">{t(`trans.goes_${r.k}_role` as Key)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </Reveal>
     </section>
   );
 }

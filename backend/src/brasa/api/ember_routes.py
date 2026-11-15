@@ -190,6 +190,7 @@ class AlertsOverviewResponse(BaseModel):
 
 
 AoiKind = Literal[
+    "world",
     "colombia_all",
     "colombia_box",
     "department",
@@ -479,7 +480,17 @@ def _build_aoi_index(
     return by_id, ordered
 
 
+# "No area selected" in the frontend: the whole planet, from the global monthly archive. Not part
+# of the gazetteer, so it never shows up in search results or the alerts overview.
+WORLD_ID = "world"
+WORLD_ENTRY = AoiEntry(
+    id=WORLD_ID, name="World", bbox=(-180.0, -90.0, 180.0, 90.0), kind="world", priority=0
+)
+
+
 def _resolve_aoi_id(aoi_id: str, by_id: Mapping[str, AoiEntry]) -> AoiEntry | None:
+    if aoi_id == WORLD_ID:
+        return WORLD_ENTRY
     if aoi_id in by_id:
         return by_id[aoi_id]
     if aoi_id.startswith("bbox:"):
@@ -797,6 +808,8 @@ def _monthly_frame_for_country_aoi(
     countries: CountryCalendars,
     fallback_ratio: SensorRatio,
 ) -> tuple[pd.DataFrame, SensorRatio]:
+    if entry.kind == "world":
+        return _world_monthly_frame(countries, fallback_ratio)
     if entry.country is None:
         return pd.DataFrame(columns=["month", "sensor", "count"]), fallback_ratio
     c_df = countries.monthly[countries.monthly["country"] == entry.country]
@@ -817,6 +830,23 @@ def _monthly_frame_for_country_aoi(
         return pd.DataFrame(columns=["month", "sensor", "count"]), ratio
     grouped = sub_df.groupby(["month", "sensor"], observed=True)["count"].sum().reset_index()
     return grouped, ratio
+
+
+def _world_monthly_frame(
+    countries: CountryCalendars, fallback_ratio: SensorRatio
+) -> tuple[pd.DataFrame, SensorRatio]:
+    """Every country summed per month and sensor, with its own VIIRS/MODIS ratio."""
+    fallback = countries.fallback_ratio or fallback_ratio
+    if countries.monthly.empty:
+        return pd.DataFrame(columns=["month", "sensor", "count"]), fallback
+    world = (
+        countries.monthly.groupby(["month", "sensor"], observed=True)["count"].sum().reset_index()
+    )
+    try:
+        ratio = fit_sensor_ratio(world)
+    except InsufficientOverlapError:
+        ratio = fallback
+    return world, ratio
 
 
 def _next_month_start(cur: date) -> date:

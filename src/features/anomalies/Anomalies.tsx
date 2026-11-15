@@ -8,7 +8,7 @@ import { fireColor, HOTSPOT_COLOR, SENSOR_COLOR } from '@/lib/colors';
 import { fmtPercent, fmtRatio, fmtSigma, fmtTempC, localeFor } from '@/lib/format';
 import { bboxId } from '@/lib/geo';
 import type { AlertAssessment, BBox, EnsoPhase } from '@/lib/types';
-import { useStore } from '@/store';
+import { useAoiName, useStore } from '@/store';
 import { EnsoPanel } from './EnsoPanel';
 
 const HOT = HOTSPOT_COLOR;
@@ -101,6 +101,7 @@ export function Anomalies() {
   const t = useT();
   const lang = useStore((s) => s.lang);
   const aoi = useStore((s) => s.aoi);
+  const aoiName = useAoiName();
   const visitorAoiId = useMemo(detectVisitorAoiId, []);
   const [tab, setTab] = useState<'countries' | 'colombia'>(() => (visitorAoiId === 'co' ? 'colombia' : 'countries'));
   const [alertTab, setAlertTab] = useState<AlertTab>('summary');
@@ -283,7 +284,7 @@ export function Anomalies() {
       {/* Top summary strip (borderless on cream, calm, left-aligned) */}
       <div className="mb-8 border-b border-line pb-6 text-left">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
-          <h3 className="font-display text-2xl text-ink sm:text-3xl">{aoi.name}</h3>
+          <h3 className="font-display text-2xl text-ink sm:text-3xl">{aoiName}</h3>
           {alert && (
             <span className="chip text-ink">
               <i aria-hidden className={`h-2 w-2 rounded-full ${severityDotClass(alert.severity)}`} />
@@ -450,7 +451,7 @@ export function Anomalies() {
         </div>
       </article>
 
-      <EnsoPanel aoiName={aoi.name} lang={lang} data={ensoQ.data} isPending={ensoQ.isPending} isError={ensoQ.isError} />
+      <EnsoPanel aoiName={aoiName} lang={lang} data={ensoQ.data} isPending={ensoQ.isPending} isError={ensoQ.isError} />
 
       {/* Deterministic Early-Warning Alert Panel with header + progressive tabs */}
       <article className="panel mt-6 p-5 sm:p-6">
@@ -465,7 +466,7 @@ export function Anomalies() {
               )}
             </div>
             <h3 className="card-title mt-1.5 text-lg">
-              {t('anom.alert_title')} — <span className="font-semibold text-ink">{aoi.name}</span>
+              {t('anom.alert_title')} — <span className="font-semibold text-ink">{aoiName}</span>
             </h3>
           </div>
           {alertQ.isError ? (

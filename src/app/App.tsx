@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { shouldPlayIntro } from '@/intro/IntroSequence';
 import IntroSequence from '@/intro/IntroSequence';
-import { canUse3D, isMobile } from '@/lib/capabilities';
+import { canUse3D } from '@/lib/capabilities';
 import { useStore } from '@/store';
 import { DataLoaders } from './loaders';
+import { ServerStatus } from './ServerStatus';
 import { Starfield } from './Starfield';
 
 // Heavy parts are split out: the first paint is only the star field and the logo.
@@ -21,7 +22,6 @@ export function App() {
     const s = useStore.getState();
     const patch: Parameters<typeof s.set>[0] = {};
     if (!canUse3D()) Object.assign(patch, { webgl: false, viewMode: '2d', sceneReady: true });
-    if (isMobile()) patch.resolution = 'week';
     if (!shouldPlayIntro()) patch.phase = 'landing';
     s.set(patch);
     setBooted(true);
@@ -43,6 +43,7 @@ export function App() {
         )}
       </div>
       {booted && <DataLoaders />}
+      {booted && <ServerStatus />}
       {booted && phase === 'intro' && <IntroSequence />}
       {booted && phase === 'landing' && (
         <Suspense fallback={null}>

@@ -4,37 +4,64 @@ import { PerspectiveCamera, Raycaster, Vector2 } from 'three';
 import { reducedMotion } from '@/lib/capabilities';
 import { clamp, latLonToXYZ, wrapLon, xyzToLatLon } from '@/lib/geo';
 import { simClock } from '@/lib/simClock';
-import { isLowPower, useStore } from '@/store';
+import { useStore } from '@/store';
 import { view } from './view';
 
 const FOV = 30;
 const F = 1 / Math.tan((FOV * Math.PI) / 360);
-/** Median frame time above this while animating (< ~35 fps) switches `auto` quality to light. */
-const SLOW_FRAME = 1 / 35;
-const PERF_SAMPLES = 120;
+/** Frame rate for the ambient motion (idle spin, satellites) while docked, i.e. on phones/tablets. */
+const DOCKED_AMBIENT_FPS = 30;
 
 const smooth = (a: number, b: number, x: number) => {
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
 };
 
+const coarse = typeof matchMedia !== 'undefined' ? matchMedia('(pointer: coarse)') : null;
+/** Touch screens and narrow windows anchor the canvas to the stage instead of the viewport. */
+const wantsDock = () => !!coarse?.matches || window.innerWidth < 1024;
+
+const DOCK_PROPS = ['position', 'inset', 'left', 'top', 'width', 'height'] as const;
+
 /**
- * Drives the camera from `view` (lon/lat/zoom), keeps the globe glued to the active DOM stage via a
- * projection view-offset, fades the canvas when no stage is visible and decides when frames are needed.
+ * Drives the camera from `view` (lon/lat/zoom), keeps the globe on the active DOM stage, fades the
+ * canvas when no stage is visible and decides when frames are needed.
+ *
+ * Two placements:
+ * - desktop: the canvas covers the viewport (fixed) and a projection view-offset glues the globe to
+ *   the stage; between stages the globe glides from one to the other.
+ * - docked (touch / narrow): the canvas is moved over the stage itself, in page coordinates, so it
+ *   scrolls natively with the page. Re-aiming a fixed canvas on every scroll frame lags behind the
+ *   finger on phones and makes the globe swim and bounce.
  */
 export function CameraRig() {
-  const { camera, size, invalidate } = useThree();
-  // frame-time monitor: only frames that follow a requested frame are timed (on-demand rendering
-  // is otherwise idle, which says nothing about speed); every window of samples is judged, and it only ever steps down
-  const perf = useRef({ asked: false, samples: [] as number[] });
-  const s = useRef({ init: false, stage: '', tx: 0, ty: 0, tf: 200, ox: 0, oy: 0, of: 0, alpha: 0, rect: null as DOMRect | null, rectStage: '' });
+  const { camera, size, invalidate, gl } = useThree();
+  const s = useRef({
+    init: false,
+    stage: '',
+    tx: 0,
+    ty: 0,
+    tf: 200,
+    ox: 0,
+    oy: 0,
+    of: 0,
+    alpha: 0,
+    rect: null as DOMRect | null,
+    rectStage: '',
+    /** page scroll when `rect` was measured: rect + scroll = page position */
+    scrollX: 0,
+    scrollY: 0,
+    dockKey: '',
+    timer: 0,
+  });
 
   useEffect(() => {
     const ray = new Raycaster();
     const ndc = new Vector2();
     view.invalidate = invalidate;
     view.pick = (cx, cy) => {
-      ndc.set((cx / window.innerWidth) * 2 - 1, -((cy / window.innerHeight) * 2 - 1));
+      const rc = gl.domElement.getBoundingClientRect();
+      ndc.set(((cx - rc.left) / rc.width) * 2 - 1, -(((cy - rc.top) / rc.height) * 2 - 1));
       ray.setFromCamera(ndc, camera);
       const o = ray.ray.origin, d = ray.ray.direction;
       const b = o.dot(d), disc = b * b - (o.dot(o) - 1);
@@ -43,42 +70,40 @@ export function CameraRig() {
       return xyzToLatLon(o.x + d.x * t, o.y + d.y * t, o.z + d.z * t);
     };
     const renderable = () => !document.hidden && useStore.getState().viewMode === '3d' && (s.current.alpha > 0.004 || view.activeStage() !== null);
-    // low-rate heartbeat: satellites and the terminator creep even when nothing else moves
-    // (4 Hz, or 2 Hz in light mode, where it is also what moves the satellites)
-    let tick = 0;
+    // low-rate heartbeat: the terminator creeps even when nothing else moves
     const beat = window.setInterval(() => {
-      tick++;
-      if (isLowPower(useStore.getState()) && tick % 2) return;
       if (renderable()) invalidate();
     }, 250);
     const vis = () => view.kick();
     document.addEventListener('visibilitychange', vis);
     invalidate();
+    const st = s.current;
     return () => {
       clearInterval(beat);
+      clearTimeout(st.timer);
       document.removeEventListener('visibilitychange', vis);
       view.invalidate = null;
       view.pick = null;
     };
-  }, [camera, invalidate]);
+  }, [camera, invalidate, gl]);
 
   useFrame((_, rawDt) => {
     const dt = Math.min(0.1, rawDt);
     const st = s.current;
     const state = useStore.getState();
     const { phase, viewMode, tool, hoverSat } = state;
-    const low = isLowPower(state);
-    const p = perf.current;
-    if (p.asked && state.quality === 'auto' && !state.autoLow) {
-      p.samples.push(rawDt);
-      if (p.samples.length >= PERF_SAMPLES) {
-        const median = p.samples.sort((a, b) => a - b)[PERF_SAMPLES >> 1];
-        p.samples.length = 0;
-        if (median > SLOW_FRAME) state.set({ autoLow: true });
-      }
-    }
     const W = size.width, H = size.height;
     const now = performance.now();
+    const layer = (camera.userData.layer ??= document.getElementById('globe-layer')) as HTMLElement | null;
+
+    // ---- placement mode ----
+    const docked = phase === 'landing' && wantsDock();
+    if (docked !== view.docked) {
+      view.docked = docked;
+      view.rectDirty = true;
+      st.dockKey = '';
+      if (!docked && layer) for (const p of DOCK_PROPS) layer.style[p] = '';
+    }
 
     // ---- layout target ----
     const stage = view.activeStage();
@@ -88,22 +113,39 @@ export function CameraRig() {
       if (view.rectDirty || !st.rect || st.rectStage !== stage.id) {
         st.rect = stage.el.getBoundingClientRect();
         st.rectStage = stage.id;
+        st.scrollX = window.scrollX;
+        st.scrollY = window.scrollY;
         view.rectDirty = false;
       }
       const r = st.rect;
+      // docked: the canvas sits on the stage, so stage coordinates are canvas coordinates
+      const ox = docked ? r.left : 0, oy = docked ? r.top : 0;
       // default: centred and fitted; a stage may place the globe itself (e.g. the hero horizon)
       const custom = stage.layout?.(r);
-      st.tx = custom ? custom.cx : r.left + r.width / 2;
-      st.ty = custom ? custom.cy : r.top + r.height / 2;
+      st.tx = (custom ? custom.cx : r.left + r.width / 2) - ox;
+      st.ty = (custom ? custom.cy : r.top + r.height / 2) - oy;
       st.tf = custom ? custom.r : 0.43 * Math.min(r.width, r.height);
-      ta = stage.alpha * smooth(0.04, 0.4, stage.ratio);
+      view.originX = ox;
+      view.originY = oy;
+      // a docked canvas leaves the screen with its stage: no need to fade it with the scroll
+      ta = docked ? stage.alpha : stage.alpha * smooth(0.04, 0.4, stage.ratio);
       sid = stage.id;
+      if (docked && layer) {
+        const left = Math.round(r.left + st.scrollX), top = Math.round(r.top + st.scrollY);
+        const w = Math.round(r.width), h = Math.round(r.height);
+        const key = `${left},${top},${w},${h}`;
+        if (key !== st.dockKey) {
+          st.dockKey = key;
+          Object.assign(layer.style, { position: 'absolute', inset: 'auto', left: `${left}px`, top: `${top}px`, width: `${w}px`, height: `${h}px` });
+        }
+      }
     } else if (phase === 'intro') {
       st.tx = W / 2;
       st.ty = H / 2;
       st.tf = 0.3 * Math.min(W, H);
       ta = 1;
       sid = 'intro';
+      view.originX = view.originY = 0;
     }
     if (viewMode === '2d') ta = 0;
     if (!st.init) {
@@ -111,11 +153,17 @@ export function CameraRig() {
       st.stage = sid;
       st.alpha = ta;
     } else if (sid !== st.stage) {
-      // keep what is on screen continuous, then ease into the new stage
       st.stage = sid;
-      st.ox = view.centerX - st.tx;
-      st.oy = view.centerY - st.ty;
-      st.of = Math.log(Math.max(1, view.radiusPx / Math.max(0.2, view.zoom)) / Math.max(1, st.tf));
+      if (docked) {
+        // the canvas has jumped to the new stage: fade in there, no glide
+        st.ox = st.oy = st.of = 0;
+        st.alpha = 0;
+      } else {
+        // keep what is on screen continuous, then ease into the new stage
+        st.ox = view.centerX - st.tx;
+        st.oy = view.centerY - st.ty;
+        st.of = Math.log(Math.max(1, view.radiusPx / Math.max(0.2, view.zoom)) / Math.max(1, st.tf));
+      }
     }
     const ease = Math.exp(-dt * 3.2);
     st.ox *= ease;
@@ -126,6 +174,7 @@ export function CameraRig() {
 
     // ---- controls ----
     let moving = false;
+    let spinning = false;
     if (view.fly) {
       const k = 1 - Math.exp(-dt * 3.4);
       const dl = wrapLon(view.fly.lon - view.lon), dp = view.fly.lat - view.lat, dz = Math.log(view.fly.zoom / view.zoom);
@@ -142,10 +191,9 @@ export function CameraRig() {
         view.vLon *= decay;
         view.vLat *= decay;
         moving = true;
-      } else if (now - view.lastInteract > 8000 && view.zoom < 1.4 && tool === 'pan' && !hoverSat && !reducedMotion() && !low && ta > 0) {
-        // the idle spin redraws every frame for as long as the globe is visible: not in light mode
+      } else if (now - view.lastInteract > 8000 && view.zoom < 1.4 && tool === 'pan' && !hoverSat && !reducedMotion() && ta > 0) {
         view.lon = wrapLon(view.lon + 2.2 * dt);
-        moving = true;
+        spinning = true;
       }
     }
 
@@ -166,15 +214,21 @@ export function CameraRig() {
     view.centerY = cy;
     view.radiusPx = (H * 0.5 * F) / Math.sqrt(d * d - 1);
 
-    const layer = cam.userData.layer ?? (cam.userData.layer = document.getElementById('globe-layer'));
-    if (layer) (layer as HTMLElement).style.opacity = st.alpha < 0.004 ? '0' : st.alpha.toFixed(3);
+    if (layer) layer.style.opacity = st.alpha < 0.004 ? '0' : st.alpha.toFixed(3);
 
     const visible = !document.hidden && viewMode === '3d' && (ta > 0 || st.alpha > 0.004);
-    // a sped-up clock (the default 60x) redraws every frame so satellites glide; light mode lets
-    // the heartbeat move them instead of keeping the GPU busy for as long as the globe is visible
-    const clockRunning = simClock.scale > 1 && !low;
-    p.asked = visible && (moving || view.dragging || settling || now - view.kickAt < 600 || clockRunning || phase === 'intro' || !!view.draft);
-    if (p.asked) invalidate();
+    if (!visible) return;
+    // a sped-up clock (the default 60x) keeps the satellites gliding; with the idle spin this is
+    // ambient motion, drawn at full rate on desktop and at 30 fps on phones and tablets
+    const ambient = spinning || simClock.scale > 1;
+    const urgent = moving || view.dragging || settling || now - view.kickAt < 600 || phase === 'intro' || !!view.draft;
+    if (urgent || (ambient && !docked)) invalidate();
+    else if (ambient && !st.timer) {
+      st.timer = window.setTimeout(() => {
+        st.timer = 0;
+        invalidate();
+      }, 1000 / DOCKED_AMBIENT_FPS);
+    }
   }, -1);
 
   return null;

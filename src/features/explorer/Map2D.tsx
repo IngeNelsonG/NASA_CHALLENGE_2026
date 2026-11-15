@@ -10,7 +10,7 @@ import type { BBox } from '@/lib/types';
 import { loadWorld } from '@/lib/world';
 import { toBBox } from '@/scenes/useGlobeStage';
 import { view } from '@/scenes/view';
-import { selectAt, useStore } from '@/store';
+import { selectAt, useStore, WORLD_ID } from '@/store';
 import { useData } from '@/store/data';
 
 const bboxPolygon = (b: BBox): GeoJSON.Polygon => {
@@ -77,7 +77,7 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
     };
 
     const draw = () => {
-      const { layers, aoi, picked } = useStore.getState();
+      const { layers, aoi } = useStore.getState();
       const { hotspots, sats, shape, shapeFor } = useData.getState();
       applyTf();
       ctx.clearRect(0, 0, W, H);
@@ -147,7 +147,7 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
         ctx.globalAlpha = 1;
       }
       // real outline when known (rings as closed paths), the box for drawn areas
-      if (shapeFor === aoi.id) {
+      if (shapeFor === aoi.id && aoi.id !== WORLD_ID) {
         ctx.beginPath();
         if (shape)
           for (const ring of shape.rings) {
@@ -205,16 +205,6 @@ export function Map2D({ interactive = true }: { interactive?: boolean }) {
         ctx.stroke();
         if (interactive) Object.assign(slot, { x: rect.left + p[0], y: rect.top + p[1], visible: true });
       });
-      if (picked) {
-        const p = proj([picked.lon, picked.lat]);
-        if (p) {
-          ctx.beginPath();
-          ctx.arc(p[0], p[1], 6, 0, 6.2832);
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-        }
-      }
       ctx.restore();
       ctx.beginPath();
       path({ type: 'Sphere' });

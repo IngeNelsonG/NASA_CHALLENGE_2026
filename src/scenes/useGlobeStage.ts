@@ -22,7 +22,10 @@ export function useGlobeStage(ref: RefObject<HTMLElement>, id: string, opts: { i
         const possible = Math.min(e.boundingClientRect.height, window.innerHeight) * e.boundingClientRect.width || 1;
         stage.ratio = clamp((e.intersectionRect.width * e.intersectionRect.height) / possible, 0, 1);
         view.rectDirty = true;
-        view.kick();
+        // docked (phones): one frame is enough to pick the active stage; a kick would redraw at
+        // full rate for as long as the page scrolls
+        if (view.docked) view.invalidate?.();
+        else view.kick();
       },
       { threshold: Array.from({ length: 21 }, (_, i) => i / 20) },
     );
@@ -165,9 +168,11 @@ export function useGlobeStage(ref: RefObject<HTMLElement>, id: string, opts: { i
       else if (e.key === 'ArrowDown') view.flyTo(c.lon, c.lat - step);
       else if (e.key === '+' || e.key === '=') view.zoomBy(1.3);
       else if (e.key === '-' || e.key === '_') view.zoomBy(1 / 1.3);
-      else if (e.key === 'Enter') store.getState().set({ picked: { lat: view.lat, lon: view.lon } });
-      else if (e.key === 'Escape') (view.engaged = false), store.getState().set({ tool: 'pan' });
-      else return;
+      else {
+        // Esc also bubbles to the explorer's handler, which cancels drawing or the selection
+        if (e.key === 'Escape') view.engaged = false;
+        return;
+      }
       e.preventDefault();
     };
 

@@ -28,6 +28,15 @@ export const view = {
   intro: { dolly: 1, sats: 1 },
   // written by the scene every frame
   radiusPx: 200,
+  /**
+   * Touch and narrow screens: the canvas is anchored over the active stage and scrolls natively
+   * with the page, instead of staying fixed and being re-aimed by JavaScript on every scroll frame
+   * (which lags behind the finger and makes the globe swim). Written by CameraRig.
+   */
+  docked: false,
+  /** viewport position of the canvas top-left corner (0,0 while the canvas covers the viewport) */
+  originX: 0,
+  originY: 0,
   centerX: 0,
   centerY: 0,
   satScreen: [] as { norad: number; x: number; y: number; visible: boolean }[],
@@ -75,6 +84,8 @@ if (typeof window !== 'undefined') {
     view.rectDirty = true;
     view.kick();
   };
-  window.addEventListener('scroll', dirty, { passive: true });
+  // a docked canvas scrolls with the page: nothing to redraw, only remember to re-measure
+  const scrolled = () => (view.docked ? (view.rectDirty = true) : dirty());
+  window.addEventListener('scroll', scrolled, { passive: true });
   window.addEventListener('resize', dirty, { passive: true });
 }

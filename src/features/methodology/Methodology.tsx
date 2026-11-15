@@ -1,5 +1,5 @@
 import { useT, type Key } from '@/app/i18n';
-import { SectionHeading } from '@/components/ui';
+import { Reveal, SectionHeading } from '@/components/ui';
 import { CHART, SENSOR_COLOR } from '@/lib/colors';
 import { USE_MOCKS } from '@/lib/env';
 
@@ -50,12 +50,7 @@ function Diagram() {
         </div>
       </div>
 
-      <svg
-        viewBox="0 0 880 250"
-        className="hidden w-full sm:block"
-        role="img"
-        aria-label={t('method.diagram_aria')}
-      >
+      <svg viewBox="0 0 880 250" className="hidden w-full sm:block" role="img" aria-label={t('method.diagram_aria')}>
         <defs>
           <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
             <path d="M0 0L8 4L0 8z" fill={CHART.axis} />
@@ -74,16 +69,14 @@ function Diagram() {
         <text x="22" y="197" className={sub}>S-NPP 2012– · NOAA-20/21</text>
         <text x="22" y="213" className={sub}>VNP14IMG / VJ114IMG</text>
 
-        {[0, 1, 2].map((i) => {
+        {stages.map((st, i) => {
           const x = 236 + i * 150;
-          const keys: Key[] = ['method.d_qc', 'method.d_grid', 'method.d_cal'];
-          const subs: Key[] = ['method.d_qc_s', 'method.d_grid_s', 'method.d_cal_s'];
           return (
-            <g key={i}>
+            <g key={st.title}>
               <rect x={x} y="86" width="124" height="78" rx="10" className={box} stroke={CHART.grid} />
-              <text x={x + 62} y="114" textAnchor="middle" className={txt}>{t(keys[i])}</text>
+              <text x={x + 62} y="114" textAnchor="middle" className={txt}>{t(st.title)}</text>
               <text y="134" textAnchor="middle" className={sub}>
-                {t(subs[i]).split(' · ').map((line, j) => (
+                {t(st.sub).split(' · ').map((line, j) => (
                   <tspan key={j} x={x + 62} dy={j ? 16 : 0}>{line}</tspan>
                 ))}
               </text>
@@ -105,6 +98,7 @@ function Diagram() {
   );
 }
 
+
 export function Methodology() {
   const t = useT();
   return (
@@ -115,57 +109,63 @@ export function Methodology() {
           <strong className="font-semibold">{t('header.mock')}.</strong> {t('method.mock_note')}
         </p>
       )}
-      <div className="panel p-4 sm:p-5">
-        <Diagram />
-      </div>
 
-      {/* 5-step numbered vertical timeline (line + dots) */}
-      <ol className="relative mx-auto mt-10 max-w-3xl space-y-7 pl-11 before:absolute before:bottom-3 before:left-[15px] before:top-3 before:w-px before:bg-line sm:pl-12">
-        {STEPS.map((s) => (
-          <li key={s.n} className="relative">
-            <span
-              aria-hidden
-              className="data absolute -left-11 top-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-graphite-800 text-xs font-semibold text-cream sm:-left-12"
-            >
-              {s.n}
-            </span>
-            <h3 className="text-lg font-semibold text-ink">{t(s.title)}</h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-ink-dim">{t(s.body)}</p>
+      <Reveal>
+        <div className="panel p-4 sm:p-6 lg:p-8">
+          <Diagram />
+        </div>
+      </Reveal>
+
+      {/* the five steps as editorial rows: number · title · explanation */}
+      <ol className="mt-14 border-t border-line lg:mt-20">
+        {STEPS.map((s, i) => (
+          <li key={s.n} className="border-b border-line">
+            <Reveal delay={i * 60} className="grid gap-x-8 gap-y-2 py-6 sm:grid-cols-[4.5rem_1fr] lg:grid-cols-[6rem_16rem_1fr] lg:py-8">
+              <span aria-hidden className="font-display text-4xl font-light leading-none text-accent lg:text-5xl">
+                {s.n}
+              </span>
+              <h3 className="text-xl font-semibold leading-snug text-ink sm:col-start-2 lg:col-start-auto lg:text-2xl">{t(s.title)}</h3>
+              <p className="max-w-2xl text-[15px] leading-relaxed text-ink-dim sm:col-start-2 lg:col-start-auto">{t(s.body)}</p>
+            </Reveal>
           </li>
         ))}
       </ol>
 
-      {/* Two calm editorial columns on lg */}
-      <div className="mt-12 grid gap-10 border-t border-line pt-10 lg:grid-cols-2 lg:gap-12">
-        <article className="min-w-0">
-          <h3 className="text-xl font-semibold text-ink">{t('method.unc_title')}</h3>
-          <p className="mt-3 text-sm leading-relaxed text-ink-dim">{t('method.unc_body')}</p>
-          <details className="mt-4 text-xs">
-            <summary className="cursor-pointer select-none py-1 font-semibold text-ink hover:text-ink-dim [@media(pointer:coarse)]:py-3.5">
-              {t('trans.show_formula')}
-            </summary>
-            <p className="data mt-3 overflow-x-auto rounded-lg border border-line bg-cream-deep/70 p-3.5 leading-relaxed text-ink">
-              H = Σ wᵢ·Êᵢ / Σ wᵢ, &nbsp; wᵢ = 1 / Var(Êᵢ)
-              <br />
-              Ê_MODIS = N_MODIS / c(t) &nbsp;·&nbsp; Ê_VIIRS = N_VIIRS / (k · n(t))
-              <br />
-              z = (log(1 + H) − μ_doy) / σ_doy
-            </p>
-            <p className="mt-2.5 leading-relaxed text-ink-mute">{t('method.unc_legend')}</p>
-          </details>
+      {/* uncertainty in plain words; the formulas live (folded) in the transparency section */}
+      <Reveal className="mt-14 lg:mt-20">
+        <article className="panel grid grid-cols-1 gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:gap-12 lg:p-10">
+          <div className="min-w-0 max-w-3xl">
+            <h3 className="font-display text-3xl font-light leading-tight text-cream sm:text-4xl">{t('method.unc_title')}</h3>
+            <p className="mt-4 text-[15px] leading-relaxed text-ink-dim">{t('method.unc_body')}</p>
+          </div>
+          <a href="#transparency-method" className="btn shrink-0 self-start lg:self-end">
+            <span aria-hidden className="font-display text-base">∑</span>
+            {t('method.to_formulas')}
+            <span aria-hidden>→</span>
+          </a>
         </article>
+      </Reveal>
 
-        <article className="min-w-0">
-          <h3 className="text-xl font-semibold text-ink">{t('method.lim_title')}</h3>
-          <ul className="mt-3 space-y-3 text-sm leading-relaxed text-ink-dim">
-            {LIMITS.map((k) => (
-              <li key={k} className="flex gap-2.5">
-                <span aria-hidden className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-mute" />
-                <span className="min-w-0">{t(k)}</span>
-              </li>
-            ))}
-          </ul>
-        </article>
+      {/* limitations: six short cards */}
+      <div className="mt-14 lg:mt-20">
+        <Reveal className="flex items-baseline justify-between gap-4 border-b border-line pb-4">
+          <h3 className="font-display text-3xl font-light text-ink sm:text-4xl">{t('method.lim_title')}</h3>
+          <span className="data text-sm text-ink-mute">{String(LIMITS.length).padStart(2, '0')}</span>
+        </Reveal>
+        <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {LIMITS.map((k, i) => (
+            <li key={k}>
+              <Reveal delay={(i % 3) * 80} className="h-full">
+                <div className="h-full rounded-2xl border border-line bg-cream-deep/60 p-5 transition-colors duration-300 hover:bg-cream-deep">
+                  <span className="data inline-flex items-center gap-1.5 text-xs font-semibold text-ink">
+                    <i aria-hidden className="h-1.5 w-1.5 rounded-full bg-accent" />L{i + 1}
+                  </span>
+                  <p className="mt-2 text-sm leading-relaxed text-ink-dim">{t(k)}</p>
+                </div>
+              </Reveal>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );

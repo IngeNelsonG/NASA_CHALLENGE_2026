@@ -1,7 +1,7 @@
 import { useT } from '@/app/i18n';
 import { Anomalies } from '@/features/anomalies/Anomalies';
-import { Explorer } from '@/features/explorer/Explorer';
-import { PickPanel, SatCard } from '@/features/explorer/Floating';
+import { CalendarBlock, Explorer } from '@/features/explorer/Explorer';
+import { SatCard } from '@/features/explorer/Floating';
 import { Assistant } from '@/features/assistant/Assistant';
 import { Methodology } from '@/features/methodology/Methodology';
 import { Transparency } from '@/features/transparency/Transparency';
@@ -22,8 +22,8 @@ export default function Landing() {
       <OrbitNav />
       <main id="main">
         <Hero />
-        {/* the explorer holds the globe and, right under it, the burn calendar */}
         <Explorer />
+        <CalendarBlock />
         <Anomalies />
         <Methodology />
         <Transparency />
@@ -31,7 +31,6 @@ export default function Landing() {
       </main>
       <Footer />
       <SatCard />
-      <PickPanel />
       <Assistant />
     </div>
   );

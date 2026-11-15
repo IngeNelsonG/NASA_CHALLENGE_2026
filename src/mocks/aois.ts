@@ -38,6 +38,8 @@ export function searchAois(q: string): AOI[] {
 
 /** Resolves gazetteer ids and custom `bbox:W,S,E,N` ids. */
 export function resolveAoi(id: string): MockAOI | null {
+  // "no area selected" in the app: the whole planet (never a search result)
+  if (id === 'world') return { id, name: 'World', kind: 'world', bbox: [-180, -90, 180, 90], peakDoy: 230 };
   const hit = MOCK_AOIS.find((x) => x.id === id);
   if (hit) return hit;
   if (id.startsWith('bbox:')) {

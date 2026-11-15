@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     firms_map_key: SecretStr | None = Field(default=None, description="NASA FIRMS MAP_KEY.")
     firms_base_url: str = "https://firms.modaps.eosdis.nasa.gov"
     cors_allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    # Optional pattern for origins that change per deploy (e.g. Vercel preview URLs).
+    cors_allowed_origin_regex: str | None = None
     data_dir: str = "data"
     # Keep satellite interpretation 100% deterministic unless generative phrasing is opted in.
     enable_generative_llm: bool = Field(

@@ -3,7 +3,7 @@ import { fmtMonth, useT, type Key } from '@/app/i18n';
 import { Spinner } from '@/components/ui';
 import { streamAnalyst } from '@/lib/sse';
 import type { AnalystHighlight } from '@/lib/types';
-import { useStore } from '@/store';
+import { useAoiName, useStore } from '@/store';
 
 const SUGGESTIONS: Key[] = ['assistant.q1', 'assistant.q2', 'assistant.q3', 'assistant.q4'];
 /** Earlier turns sent with each question (the server accepts up to 8). */
@@ -16,7 +16,7 @@ export function Assistant() {
   const t = useT();
   const lang = useStore((s) => s.lang);
   const aoi = useStore((s) => s.aoi);
-  const picked = useStore((s) => !!s.picked);
+  const aoiName = useAoiName();
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [question, setQuestion] = useState('');
@@ -83,7 +83,7 @@ export function Assistant() {
               <h2 id="assistant-title" className="card-title">
                 {t('assistant.title')}
               </h2>
-              <p className="mt-0.5 text-xs text-ink-dim">{t('assistant.lead', { aoi: aoi.name })}</p>
+              <p className="mt-0.5 text-xs text-ink-dim">{t('assistant.lead', { aoi: aoiName })}</p>
             </div>
             <button type="button" className="btn btn-icon shrink-0" onClick={close} aria-label={t('assistant.close')}>
               <span aria-hidden>✕</span>
@@ -162,7 +162,7 @@ export function Assistant() {
         aria-controls="assistant-panel"
         aria-label={open ? t('assistant.close') : t('assistant.open')}
         onClick={() => (open ? close() : setOpen(true))}
-        className={`btn btn-primary fixed bottom-4 right-4 z-50 h-14 min-w-14 rounded-full !px-4 shadow-panel sm:bottom-6 sm:right-6 ${picked && !open ? 'max-sm:hidden' : ''}`}
+        className="btn btn-primary fixed bottom-4 right-4 z-50 h-14 min-w-14 rounded-full !px-4 shadow-panel sm:bottom-6 sm:right-6"
       >
         <span aria-hidden className="text-lg leading-none">
           {open ? '✕' : '?'}

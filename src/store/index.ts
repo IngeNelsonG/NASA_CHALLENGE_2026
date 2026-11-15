@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 import { bboxCenter, bboxSpan, clamp, todayIso } from '@/lib/geo';
-import { detectLowTier } from '@/lib/capabilities';
 import { RECORD_START } from '@/lib/env';
 import type { AnalystHighlight, AOI, Resolution } from '@/lib/types';
 import { view } from '@/scenes/view';
@@ -9,7 +8,7 @@ import { view } from '@/scenes/view';
 let selectSeq = 0;
 let selectCtrl: AbortController | null = null;
 
-/** Select country AOI at clicked coordinates, falling back to point inspection on 404/error. */
+/** Select the country under a click and frame it, as a name search does (ocean clicks do nothing). */
 export async function selectAt(hit: { lat: number; lon: number }): Promise<void> {
   const seq = ++selectSeq;
   selectCtrl?.abort();
@@ -18,14 +17,10 @@ export async function selectAt(hit: { lat: number; lon: number }): Promise<void>
   try {
     const aoi = await api.aoiAt(hit.lat, hit.lon, ctrl.signal);
     if (seq !== selectSeq || ctrl.signal.aborted) return;
-    if (aoi && typeof aoi.id === 'string' && Array.isArray(aoi.bbox)) {
-      useStore.getState().setAoi(aoi, false);
-      return;
-    }
+    if (aoi && typeof aoi.id === 'string' && Array.isArray(aoi.bbox)) useStore.getState().setAoi(aoi);
   } catch {
-    if (seq !== selectSeq || ctrl.signal.aborted) return;
+    /* no country there */
   }
-  useStore.getState().set({ picked: hit });
 }
 
 export type Lang = 'en' | 'es';
@@ -34,22 +29,17 @@ export type Granularity = 'day' | 'month' | 'year';
 export type LayerId = 'density' | 'terminator' | 'orbits' | 'borders';
 export type DateRange = { from: string; to: string };
 export type TimeScale = 1 | 60 | 600;
-/** Globe rendering quality: `auto` follows the device and the measured frame time. */
-export type Quality = 'auto' | 'high' | 'low';
 
 /** How many previous areas "undo selection" can step back through. */
 const HISTORY = 10;
 
-export const DEFAULT_AOI: AOI = { id: 'co-orinoquia', name: 'Orinoquía, Colombia', bbox: [-74.0, 2.0, -67.4, 7.2] };
-
-const storedQuality = (): Quality => {
-  try {
-    const q = localStorage.getItem('quality');
-    return q === 'high' || q === 'low' ? q : 'auto';
-  } catch {
-    return 'auto';
-  }
-};
+/**
+ * "No area selected": the whole planet. The data sections show the global monthly archive and the
+ * globe draws no outline and no points until the user picks an area.
+ */
+export const WORLD_ID = 'world';
+export const DEFAULT_AOI: AOI = { id: WORLD_ID, name: 'World', bbox: [-180, -90, 180, 90] };
+export const isWorld = (aoi: AOI) => aoi.id === WORLD_ID;
 
 const storedLang = (): Lang => {
   try {
@@ -64,15 +54,12 @@ type State = {
   phase: 'intro' | 'landing';
   sceneReady: boolean;
   webgl: boolean;
+  /** 3D globe; 2D only as the fallback when WebGL is unavailable */
   viewMode: '3d' | '2d';
-  quality: Quality;
-  /** set by device detection or the frame-time monitor; only used while `quality` is `auto` */
-  autoLow: boolean;
   layers: Record<LayerId, boolean>;
   aoi: AOI;
   /** areas selected before the current one, most recent last (for "undo selection") */
   aoiHistory: AOI[];
-  picked: { lat: number; lon: number } | null;
   date: string;
   granularity: Granularity;
   playing: boolean;
@@ -86,12 +73,13 @@ type State = {
   section: string;
 
   setLang: (l: Lang) => void;
-  setQuality: (q: Quality) => void;
   set: (p: Partial<State>) => void;
   toggleLayer: (id: LayerId) => void;
   setAoi: (aoi: AOI, fly?: boolean) => void;
   /** Go back to the previously selected area (e.g. after a misclick on the globe). */
   undoAoi: () => void;
+  /** Cancel the selection: back to the default area (Esc or the "clear selection" button). */
+  clearAoi: () => void;
   flyToAoi: () => void;
   /** Calendar → globe: jump the timeline to a date and bring the explorer into view. */
   focusDate: (date: string, granularity?: Granularity) => void;
@@ -108,18 +96,15 @@ export const useStore = create<State>((set, get) => ({
   sceneReady: false,
   webgl: true,
   viewMode: '3d',
-  quality: storedQuality(),
-  autoLow: typeof window !== 'undefined' && detectLowTier(),
   layers: { density: false, terminator: true, orbits: true, borders: true },
   aoi: DEFAULT_AOI,
   aoiHistory: [],
-  picked: null,
   date: todayIso(),
   granularity: 'month',
   playing: false,
   timeScale: 60,
   calRange: { from: RECORD_START, to: todayIso() },
-  resolution: 'day',
+  resolution: 'month',
   tool: 'pan',
   hoverSat: null,
   highlights: [],
@@ -134,21 +119,12 @@ export const useStore = create<State>((set, get) => ({
     document.documentElement.lang = lang;
     set({ lang });
   },
-  setQuality: (quality) => {
-    try {
-      localStorage.setItem('quality', quality);
-    } catch {
-      /* storage unavailable */
-    }
-    set({ quality });
-  },
   set: (p) => set(p),
   toggleLayer: (id) => set((s) => ({ layers: { ...s.layers, [id]: !s.layers[id] } })),
   setAoi: (aoi, fly = true) => {
     const prev = get().aoi;
     set((s) => ({
       aoi,
-      picked: null,
       highlights: [],
       aoiHistory: prev.id === aoi.id ? s.aoiHistory : [...s.aoiHistory, prev].slice(-HISTORY),
     }));
@@ -158,11 +134,23 @@ export const useStore = create<State>((set, get) => ({
     const history = get().aoiHistory;
     const prev = history[history.length - 1];
     if (!prev) return;
-    set({ aoi: prev, aoiHistory: history.slice(0, -1), picked: null, highlights: [] });
+    set({ aoi: prev, aoiHistory: history.slice(0, -1), highlights: [] });
+    get().flyToAoi();
+  },
+  clearAoi: () => {
+    selectSeq++;
+    selectCtrl?.abort();
+    const prev = get().aoi;
+    set({ tool: 'pan' });
+    if (isWorld(prev)) return;
+    set((s) => ({ aoi: DEFAULT_AOI, aoiHistory: [...s.aoiHistory, prev].slice(-HISTORY), highlights: [] }));
     get().flyToAoi();
   },
   flyToAoi: () => {
-    const { bbox } = get().aoi;
+    const { aoi } = get();
+    // nothing selected: step back to the whole globe, keeping the side of the Earth in view
+    if (isWorld(aoi)) return view.flyTo(view.fly?.lon ?? view.lon, 8, 1);
+    const { bbox } = aoi;
     const c = bboxCenter(bbox);
     view.flyTo(c.lon, c.lat, zoomForSpan(bboxSpan(bbox)));
   },
@@ -198,5 +186,6 @@ export function timelineRange(date: string, g: Granularity): { from: string; to:
   return { from: `${y}-01-01`, to: cap(`${y}-12-31`) };
 }
 
-/** Light globe: lower pixel density, 2K textures, no idle spin, slower satellite heartbeat. */
-export const isLowPower = (s: { quality: Quality; autoLow: boolean }) => s.quality === 'low' || (s.quality === 'auto' && s.autoLow);
+
+/** Display name of the current area ("Whole world" while nothing is selected). */
+export const useAoiName = () => useStore((s) => (isWorld(s.aoi) ? (s.lang === 'es' ? 'Todo el mundo' : 'Whole world') : s.aoi.name));

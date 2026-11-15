@@ -1,7 +1,7 @@
 import { Line } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BufferAttribute, BufferGeometry, type LineSegments, type Mesh } from 'three';
+import { BufferAttribute, BufferGeometry, type LineSegments } from 'three';
 import { mesh as topoMesh } from 'topojson-client';
 import type { GeometryCollection } from 'topojson-specification';
 import { SENSOR_COLOR } from '@/lib/colors';
@@ -9,7 +9,7 @@ import { latLonToXYZ } from '@/lib/geo';
 import type { Shape } from '@/lib/shape';
 import type { BBox } from '@/lib/types';
 import { loadWorld } from '@/lib/world';
-import { useStore } from '@/store';
+import { useStore, WORLD_ID } from '@/store';
 import { useData } from '@/store/data';
 import { view } from './view';
 
@@ -81,26 +81,18 @@ function shapeSegments(shape: Shape, r = 1.0022): [number, number, number][] {
   return out;
 }
 
-/** AOI outline (real boundary, or the box for drawn areas), the rectangle being drawn, and the picked-point marker. */
+/** AOI outline (real boundary, or the box for drawn areas) and the rectangle being drawn. */
 export function AoiOverlay() {
   const bbox = useStore((s) => s.aoi.bbox);
-  const picked = useStore((s) => s.picked);
   const { invalidate } = useThree();
   const aoiId = useStore((s) => s.aoi.id);
   const shape = useData((s) => (s.shapeFor === aoiId ? s.shape : null));
   const shapePending = useData((s) => s.shapeFor !== aoiId);
   const points = useMemo(() => (shape ? shapeSegments(shape) : bboxRing(bbox)), [shape, bbox]);
-  const marker = useRef<Mesh>(null);
   const draft = useRef<LineSegments>(null);
   const draftKey = useRef('');
 
-  useEffect(() => invalidate(), [points, picked, shapePending, invalidate]);
-
-  useEffect(() => {
-    if (!marker.current || !picked) return;
-    marker.current.position.set(...latLonToXYZ(picked.lat, picked.lon, 1.003));
-    marker.current.lookAt(0, 0, 0);
-  }, [picked]);
+  useEffect(() => invalidate(), [points, shapePending, invalidate]);
 
   useFrame(() => {
     const line = draft.current;
@@ -122,17 +114,13 @@ export function AoiOverlay() {
   return (
     <>
       {/* hidden until the outline is known, so a country never flashes as a big rectangle */}
-      {!shapePending && points.length > 1 && (
+      {!shapePending && aoiId !== WORLD_ID && points.length > 1 && (
         <Line key={shape ? 'shape' : 'box'} points={points} segments={!!shape} color={SENSOR_COLOR.harmonized} lineWidth={1.6} transparent opacity={0.9} depthWrite={false} />
       )}
       <lineSegments ref={draft} visible={false}>
         <bufferGeometry />
         <lineBasicMaterial color="#ffffff" transparent opacity={0.9} depthTest={false} />
       </lineSegments>
-      <mesh ref={marker} visible={!!picked}>
-        <ringGeometry args={[0.006, 0.0085, 32]} />
-        <meshBasicMaterial color="#ffffff" side={2} transparent opacity={0.95} depthWrite={false} toneMapped={false} />
-      </mesh>
     </>
   );
 }

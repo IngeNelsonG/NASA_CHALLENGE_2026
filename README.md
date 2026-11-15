@@ -1,11 +1,11 @@
-# Ember Calendar — harmonized MODIS + VIIRS fire activity
+# Ember — harmonized MODIS + VIIRS fire activity
 
 Frontend for the NASA Space Apps Challenge 2026 challenge **"Harmonization of MODIS and VIIRS Hot Spots"** (authored by CONAE).
 It turns two fire records that cannot be compared directly — MODIS (1 km, 2000→) and VIIRS (375 m, 2012→) — into one burn-activity calendar for an area of interest.
 
 > Documentación completa de física radiativa (Planck/Wien), estadística de anomalías, alertas CAP-1.2, GOES-16/18/19 ABI y ciclo de vida 2027+: [`TRANSPARENCIA_CIENTIFICA_Y_ESTADISTICA.md`](./TRANSPARENCIA_CIENTIFICA_Y_ESTADISTICA.md)
 
-> "Ember Calendar" is a working title. Change it in `src/lib/env.ts` (`APP_NAME`) and `index.html`.
+> "Ember" is the app name. Change it in `src/lib/env.ts` (`APP_NAME`) and `index.html`.
 
 ## Run
 
@@ -77,6 +77,20 @@ BRASA_FIRMS_MAP_KEY=your-key
 
 Points outside Colombia are then fetched live from the FIRMS Area API (standard archive for older days, near-real-time for the last ~3 months), cached in memory, for spans up to 62 days (timeline set to *Day* or *Month*). FIRMS allows 5000 requests per 10 minutes per key; one month is ~14 requests.
 
+## Deployment (Vercel + Render)
+
+The frontend is a static Vite build on **Vercel**; the API is the `backend/Dockerfile` image on **Render** (free plan). The browser calls the API directly, so the API must allow the site's origin (CORS).
+
+1. **API on Render.** Render → *New* → *Blueprint* → this repository. `render.yaml` creates the `ember-api` web service (Docker, `/health` check, `PORT=8000`, CORS for `https://nasachallenge2026.vercel.app` and its preview URLs). Fill in the secrets it asks for: `BRASA_FIRMS_MAP_KEY` (points outside Colombia) and, optionally, `BRASA_LLM_BASE_URL` / `BRASA_LLM_API_KEY` / `BRASA_LLM_MODEL` (AI wording in the help assistant). When it is live, copy its URL, e.g. `https://ember-api-xxxx.onrender.com`, and check `<url>/health`.
+2. **Frontend on Vercel.** Project → *Settings* → *Environment Variables* (Production and Preview):
+   - `VITE_USE_MOCKS` = `false`
+   - `VITE_API_URL` = the Render URL, without a trailing slash
+
+   Vite writes these into the bundle at build time, so **redeploy** after changing them.
+3. If the site uses another domain, add it to `BRASA_CORS_ALLOWED_ORIGINS` on Render (a JSON list).
+
+Free Render services sleep after 15 minutes without traffic; the first visit then waits up to a minute and the page shows a "waking up the data server" note meanwhile. Open the site a few minutes before presenting.
+
 ## What the mock data is
 
 `src/mocks/model.ts` is a seeded generator, not a sample of FIRMS. It reproduces the *shape* of the problem: a fire season, year-to-year variability, multi-day episodes, sensor start dates (Terra 2000, Aqua 2002, S-NPP 2012, NOAA-20 2018, NOAA-21 2024), a few outages and gaps. Calendar counts and hotspot points come from the same generator, so they agree. **No number shown in demo mode is a measurement**, including the VIIRS/MODIS ratio.
@@ -100,12 +114,13 @@ src/
   store/        Zustand stores
 ```
 
-- **One WebGL renderer.** The canvas is fixed behind the page. Any DOM element can become a "stage" (`useGlobeStage`); the camera uses a projection view-offset to keep the globe centred on the active stage, so the intro, the hero and the explorer share the same Earth.
+- **One WebGL renderer.** Any DOM element can become a "stage" (`useGlobeStage`), so the intro, the hero and the explorer share the same Earth. On desktop the canvas is fixed behind the page and a projection view-offset keeps the globe on the active stage. On touch and narrow screens the canvas is *docked*: moved over the active stage in page coordinates so it scrolls natively (a fixed canvas re-aimed on every scroll frame lags behind the finger), with ambient motion capped at 30 fps.
 - **Earth-fixed frame.** The Earth never rotates; the camera orbits it. Satellites (satellite.js, SGP4 → ECEF) and the sun direction (day/night terminator) are computed in that frame from a simulated UTC clock (×1 / ×60 / ×600).
 - **Rendering on demand.** `frameloop="demand"`; `CameraRig` requests frames only while something moves, plus a 4 fps heartbeat for satellites. Nothing renders when the tab is hidden or no stage is on screen.
 - **Hotspots** are one `Points` draw call with a shader; density hexagons are one `InstancedMesh`.
 - **Worker.** Fetching, parsing, typed-array packing, hex binning and CSV export run in `src/lib/data.worker.ts`.
-- **2D fallback.** Without WebGL2, or on low-memory devices, the app uses the Equal Earth canvas map (`Map2D`), which is also the "2D" side of the view toggle.
+- **2D fallback.** Without WebGL2, or on low-memory devices, the app uses the Equal Earth canvas map (`Map2D`).
+- **No area selected = the whole world.** The default area is the virtual `world` id: the globe draws no outline and no points, and the calendar, anomalies and transparency sections use every country summed by month (`GET /api/calendar?aoi=world`).
 - **Code splitting.** First paint is the star field (2D canvas) and the logo, ~120 KB gzip of JS+CSS (React, GSAP core, satellite.js, TanStack Query). three.js, the scene, the landing and the calendar are lazy chunks.
 
 ## Brand assets

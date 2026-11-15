@@ -102,8 +102,8 @@ function Satellite({ sat, index }: { sat: Sat; index: number }) {
     const t = Math.min(1, Math.max(0, -camera.position.dot(tmp.d) / tmp.d.lengthSq()));
     const clear = tmp.v.copy(camera.position).addScaledVector(tmp.d, t).length() > 1.0;
     tmp.v.copy(g.position).project(camera);
-    slot.x = (tmp.v.x * 0.5 + 0.5) * size.width;
-    slot.y = (-tmp.v.y * 0.5 + 0.5) * size.height;
+    slot.x = view.originX + (tmp.v.x * 0.5 + 0.5) * size.width;
+    slot.y = view.originY + (-tmp.v.y * 0.5 + 0.5) * size.height;
     slot.visible = clear && tmp.v.z < 1;
 
     // ground-frame trail of the last ~0.9 orbit; refreshed every 15 simulated seconds
