@@ -1,4 +1,5 @@
 // Mock backend: answers every /api/* route with a real Response, honouring the contracts in lib/types.ts.
+import { isEnsoRelevantAoi } from '@/features/anomalies/alertMeta';
 import { fmtRatio, fmtSigned } from '@/lib/format';
 import type {
   AnalystHighlight,
@@ -238,7 +239,29 @@ export async function mockFetch(path: string, init?: RequestInit): Promise<Respo
     const aoi = resolveAoi(q.get('aoi') ?? '');
     if (!aoi) return jsonRes({ error: 'unknown aoi' }, 404);
     await sleep(100);
-    return jsonRes(syntheticEnso(aoi.bbox));
+    return jsonRes({ relevant: isEnsoRelevantAoi(aoi), ...syntheticEnso(aoi.bbox) });
+  }
+  if (route === '/api/alerts/overview') {
+    return jsonRes({ countries: [], colombia: [] });
+  }
+  if (route === '/api/alerts/regions') {
+    return jsonRes([]);
+  }
+  if (route === '/api/alerts/smtp-status') {
+    return jsonRes({ configured: false, host: null, port: 587, from_email: null, subscribers_count: 0 });
+  }
+  if (route === '/api/alerts/subscribe' && init?.method === 'POST') {
+    const req = JSON.parse(String(init.body ?? '{}')) as { email?: string; aoi_id?: string };
+    return jsonRes({
+      status: 'subscribed_smtp_pending',
+      email: req.email ?? 'demo@example.org',
+      aoi_id: req.aoi_id ?? 'co',
+      region_name: 'Colombia',
+      severity: 'NORMAL',
+      smtp_configured: false,
+      message_es: 'Modo demo: configura SMTP_HOST en el backend para enviar boletines reales.',
+      message_en: 'Demo mode: configure SMTP_HOST in the backend to send live bulletins.',
+    });
   }
   if (route === '/api/aoi/geometry') {
     const aoi = resolveAoi(q.get('aoi') ?? '');

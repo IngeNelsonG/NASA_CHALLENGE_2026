@@ -2,19 +2,21 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fmtInt, fmtMonth, monthName, useT, type Key } from '@/app/i18n';
 import { useCalendar } from '@/app/loaders';
-import { SectionHeading, Segmented, Spinner } from '@/components/ui';
+import { SectionHeading, Spinner } from '@/components/ui';
 import { api } from '@/lib/api';
 import { fireColor, HOTSPOT_COLOR, SENSOR_COLOR } from '@/lib/colors';
 import { fmtPercent, fmtRatio, fmtSigma, fmtTempC, localeFor } from '@/lib/format';
 import { bboxId } from '@/lib/geo';
 import type { AlertAssessment, BBox, EnsoPhase } from '@/lib/types';
 import { useAoiName, useStore } from '@/store';
+import { ensoDotClass, isEnsoRelevantAoi, severityStyle } from './alertMeta';
 import { EnsoPanel } from './EnsoPanel';
+import { NewsletterCard } from './NewsletterCard';
+import { WarningGuideCard } from './WarningGuideCard';
 
 const HOT = HOTSPOT_COLOR;
 const COOL = SENSOR_COLOR.viirs;
 
-type AlertTab = 'summary' | 'authorities' | 'location';
 type SortKey = 'territory' | 'level' | 'z' | 'ratio' | 'nrt' | 'authority';
 type SortDir = 'asc' | 'desc';
 
@@ -55,6 +57,7 @@ function detectVisitorAoiId(): string {
     if (tz.startsWith('America/Argentina/')) return 'ar';
     if (tz.startsWith('Australia/')) return 'country:australia';
     if (tz.startsWith('Asia/Jakarta') || tz.startsWith('Asia/Makassar')) return 'country:indonesia';
+    if (tz === 'Asia/Tokyo') return 'country:japan';
     const lang = (navigator.language || '').toUpperCase();
     if (lang.endsWith('-BR')) return 'country:brazil';
     if (lang.endsWith('-AR')) return 'ar';
@@ -64,36 +67,30 @@ function detectVisitorAoiId(): string {
     if (lang.endsWith('-US')) return 'country:united-states';
     if (lang.endsWith('-ES')) return 'country:spain';
     if (lang.endsWith('-PT')) return 'pt';
+    if (lang.endsWith('-JP')) return 'country:japan';
   } catch {
     /* fallback below */
   }
   return 'co';
 }
 
-function severityDotClass(sev: AlertAssessment['severity']): string {
-  if (sev === 'CRITICAL') return 'bg-sev-critical';
-  if (sev === 'WARNING') return 'bg-sev-warning';
-  if (sev === 'WATCH') return 'bg-sev-watch';
-  return 'bg-sev-normal';
-}
-
-function ensoDotClass(phase: EnsoPhase): string {
-  if (phase === 'EL_NINO') return 'bg-accent';
-  if (phase === 'LA_NINA') return 'bg-viirs';
-  return 'bg-ink-mute';
-}
-
+/** Select an alert territory in the store so the globe, calendar, charts, and transparency update together. */
 async function focusAlertTerritory(item: AlertAssessment): Promise<void> {
+  if (item.bbox && item.bbox.length === 4) {
+    useStore.getState().setAoi({ id: item.aoi_id, name: item.region_name, bbox: item.bbox }, true);
+    return;
+  }
+  const current = useStore.getState().aoi;
+  useStore.getState().setAoi({ id: item.aoi_id, name: item.region_name, bbox: current.bbox }, false);
   const q = (item.department ?? item.country ?? item.region_name).replace(/,\s*Colombia$/i, '');
   try {
     const hits = await api.searchAoi(q);
     const match = hits.find((h) => h.id === item.aoi_id) ?? hits[0];
     if (match) {
       useStore.getState().setAoi(match, true);
-      return;
     }
   } catch {
-    /* keep selection gracefully if offline */
+    /* keep fallback selection gracefully if search fails */
   }
 }
 
@@ -103,12 +100,9 @@ export function Anomalies() {
   const aoi = useStore((s) => s.aoi);
   const aoiName = useAoiName();
   const visitorAoiId = useMemo(detectVisitorAoiId, []);
-  const [tab, setTab] = useState<'countries' | 'colombia'>(() => (visitorAoiId === 'co' ? 'colombia' : 'countries'));
-  const [alertTab, setAlertTab] = useState<AlertTab>('summary');
   const [sortKey, setSortKey] = useState<SortKey>('level');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [filterText, setFilterText] = useState('');
-  const [activeOnly, setActiveOnly] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<'idle' | 'loading' | 'denied'>('idle');
   const sectionRef = useRef<HTMLElement>(null);
   const [nearViewport, setNearViewport] = useState(false);
@@ -197,21 +191,36 @@ export function Anomalies() {
     );
   };
 
+  const countriesList = useMemo(() => overviewQ.data?.countries ?? [], [overviewQ.data]);
+
+  // Unified global active alerts list (countries + sub-regions), deduped by AOI id and filtered strictly by search text.
+  const activeAlerts = useMemo(() => {
+    const merged = new Map<string, AlertAssessment>();
+    for (const item of [...(overviewQ.data?.countries ?? []), ...(overviewQ.data?.colombia ?? [])]) {
+      if (item.severity === 'NORMAL') continue;
+      if (!merged.has(item.aoi_id)) merged.set(item.aoi_id, item);
+    }
+    return Array.from(merged.values());
+  }, [overviewQ.data]);
+
   const directoryItems = useMemo(() => {
-    const raw = tab === 'countries' ? (overviewQ.data?.countries ?? []) : (overviewQ.data?.colombia ?? []);
     const needle = filterText.trim().toLowerCase();
-    const filtered = raw.filter((item) => {
-      if (activeOnly && item.severity === 'NORMAL') return false;
+    const filtered = activeAlerts.filter((item) => {
       if (!needle) return true;
-      return item.region_name.toLowerCase().includes(needle) || item.aoi_id.toLowerCase().includes(needle);
+      return (
+        item.region_name.toLowerCase().includes(needle) ||
+        (item.country ?? '').toLowerCase().includes(needle) ||
+        (item.department ?? '').toLowerCase().includes(needle) ||
+        item.aoi_id.toLowerCase().includes(needle)
+      );
     });
     const loc = localeFor(lang);
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...filtered].sort((a, b) => {
       if (sortKey === 'territory') return dir * a.region_name.localeCompare(b.region_name, loc);
       if (sortKey === 'level') {
-        const diff = a.severity_rank - b.severity_rank;
-        return dir * (diff !== 0 ? diff : a.z_score - b.z_score);
+        if (a.severity_rank !== b.severity_rank) return dir * (a.severity_rank - b.severity_rank);
+        return dir * (a.z_score - b.z_score);
       }
       if (sortKey === 'z') return dir * (a.z_score - b.z_score);
       if (sortKey === 'ratio') return dir * (a.anomaly_ratio - b.anomaly_ratio);
@@ -227,7 +236,7 @@ export function Anomalies() {
       const ba = b.authorities[0]?.code ?? '';
       return dir * aa.localeCompare(ba, loc);
     });
-  }, [overviewQ.data, tab, filterText, activeOnly, sortKey, sortDir, lang]);
+  }, [activeAlerts, filterText, sortKey, sortDir, lang]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -246,7 +255,8 @@ export function Anomalies() {
     const peak = means.indexOf(Math.max(...means));
     const total = means.reduce((a, b) => a + b, 0) || 1;
     const on = means.map((v) => v >= means[peak] * 0.5);
-    let a = peak, b = peak;
+    let a = peak,
+      b = peak;
     while (on[(a + 11) % 12] && (a + 11) % 12 !== b) a = (a + 11) % 12;
     while (on[(b + 1) % 12] && (b + 1) % 12 !== a) b = (b + 1) % 12;
     const inSeason = (m: number) => (a <= b ? m >= a && m <= b : m >= a || m <= b);
@@ -262,38 +272,299 @@ export function Anomalies() {
   };
 
   const alert = alertQ.data;
+  const showEnso = isEnsoRelevantAoi(aoi, alert, ensoQ.data);
   const ensoCur = ensoQ.data?.current;
-  const stripPhase: EnsoPhase | null = ensoCur?.phase ?? alert?.enso_phase ?? null;
-  const stripOni = ensoCur?.oni ?? alert?.oni_value ?? null;
-  const stripPhaseLabel = ensoCur
-    ? (ensoCur.phase === 'EL_NINO' || ensoCur.phase === 'LA_NINA') && ensoCur.strength
-      ? t(`enso.phase_${ensoCur.phase}_${ensoCur.strength}` as Key)
-      : t(`enso.phase_${ensoCur.phase}` as Key)
-    : stripPhase
-      ? t(`enso.phase_${stripPhase}` as Key)
+  const stripPhase: EnsoPhase | null = showEnso ? (ensoCur?.phase ?? alert?.enso_phase ?? null) : null;
+  const stripOni = showEnso ? (ensoCur?.oni ?? alert?.oni_value ?? null) : null;
+  const stripPhaseLabel =
+    showEnso && stripPhase
+      ? ensoCur
+        ? (ensoCur.phase === 'EL_NINO' || ensoCur.phase === 'LA_NINA') && ensoCur.strength
+          ? t(`enso.phase_${ensoCur.phase}_${ensoCur.strength}` as Key)
+          : t(`enso.phase_${ensoCur.phase}` as Key)
+        : t(`enso.phase_${stripPhase}` as Key)
       : null;
 
   const sortMark = (key: SortKey) => (sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '');
   const ariaSort = (key: SortKey): 'ascending' | 'descending' | 'none' =>
     sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
 
+  // Visual gauge geometry + plain-language percentage summary for the active Early Warning block
+  const alertBar = useMemo(() => {
+    if (!alert) return null;
+    const obs = Math.max(0, alert.latest_harmonized);
+    const med = Math.max(0, alert.climatology_median);
+    const p90 = Math.max(0, alert.climatology_p90);
+    const scaleMax = Math.max(obs, p90, med * 1.4, 1);
+    const pctDelta = Math.round((alert.anomaly_ratio - 1) * 100);
+    const deltaLabel =
+      Math.abs(pctDelta) < 8
+        ? t('anom.alert_pct_normal')
+        : pctDelta > 0
+          ? t('anom.alert_pct_above', { pct: fmtInt(pctDelta, lang) })
+          : t('anom.alert_pct_below', { pct: fmtInt(Math.abs(pctDelta), lang) });
+    return {
+      obsPct: Math.min(100, (obs / scaleMax) * 100),
+      medPct: Math.min(100, (med / scaleMax) * 100),
+      p90Pct: Math.min(100, (p90 / scaleMax) * 100),
+      deltaLabel,
+      pctDelta,
+    };
+  }, [alert, lang, t]);
+
+  const zPlainLabel = (z: number) => {
+    if (z >= 2) return t('cal.z_far_above');
+    if (z >= 0.8) return t('cal.z_above');
+    if (z <= -2) return t('cal.z_far_below');
+    if (z <= -0.8) return t('cal.z_below');
+    return t('cal.z_normal');
+  };
+
   return (
     <section id="anomalies" ref={sectionRef} className="section" aria-labelledby="anomalies-title">
       <SectionHeading id="anomalies-title" eyebrow={t('anom.eyebrow')} title={t('anom.title')} lead={t('anom.lead')} />
 
-      {/* Top summary strip (borderless on cream, calm, left-aligned) */}
-      <div className="mb-8 border-b border-line pb-6 text-left">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
+      {/* 1. Global Early-Warning Monitor at the top: title + search input + clickable alert rows */}
+      <article className="panel p-5 sm:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="max-w-2xl">
+            <h3 className="card-title text-lg sm:text-xl">{t('anom.dir_title')}</h3>
+            <p className="mt-1 text-sm text-ink-dim">{t('anom.dir_lead')}</p>
+          </div>
+          <label className="w-full sm:w-80">
+            <span className="sr-only">{t('anom.filter_ph')}</span>
+            <input
+              type="search"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              placeholder={t('anom.filter_ph')}
+              className="input text-sm"
+            />
+          </label>
+        </div>
+
+        {overviewQ.isLoading ? (
+          <div className="mt-6 flex justify-center py-8">
+            <Spinner label={t('common.loading')} />
+          </div>
+        ) : directoryItems.length === 0 ? (
+          <p className="mt-6 text-sm text-ink-dim">{t('anom.dir_empty')}</p>
+        ) : (
+          <>
+            {/* Mobile sort selector */}
+            <label className="mt-4 flex items-center gap-2 text-xs text-ink-dim sm:hidden">
+              <span>{t('anom.sort_by')}</span>
+              <select
+                value={sortKey}
+                onChange={(e) => {
+                  const next = e.target.value as SortKey;
+                  setSortKey(next);
+                  setSortDir(next === 'territory' || next === 'authority' ? 'asc' : 'desc');
+                }}
+                className="input min-h-8 w-auto py-1 text-xs"
+              >
+                <option value="level">{t('anom.col_level')}</option>
+                <option value="z">{t('anom.col_sigma')}</option>
+                <option value="ratio">{t('anom.col_ratio')}</option>
+                <option value="nrt">{t('anom.col_nrt')}</option>
+                <option value="territory">{t('anom.col_territory')}</option>
+              </select>
+            </label>
+
+            {/* Mobile clickable rows */}
+            <ul className="mt-4 max-h-96 divide-y divide-line/60 overflow-y-auto border-t border-line sm:hidden">
+              {directoryItems.map((item) => {
+                const st = severityStyle(item.severity);
+                const auth = item.authorities[0];
+                const label = lang === 'es' ? item.severity_label_es : item.severity_label_en;
+                return (
+                  <li
+                    key={item.aoi_id}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`${item.region_name} — ${label}`}
+                    onClick={() => void focusAlertTerritory(item)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        void focusAlertTerritory(item);
+                      }
+                    }}
+                    className={`cursor-pointer px-2 py-3 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cream ${
+                      item.aoi_id === aoi.id ? 'bg-accent/15' : 'hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-semibold text-ink">{item.region_name}</span>
+                      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-ink">
+                        <i aria-hidden className={`h-2 w-2 rounded-full ${st.dot}`} />
+                        <span aria-hidden>{st.symbol}</span>
+                        {label}
+                      </span>
+                    </div>
+                    <div className="data mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-ink-dim">
+                      <span>{fmtRatio(item.anomaly_ratio, lang, 2)}</span>
+                      <span>· {fmtSigma(item.z_score, lang, 2)}</span>
+                      {item.nrt_detections != null && item.nrt_percent_of_normal != null && (
+                        <span>
+                          · {fmtInt(item.nrt_detections, lang)} {t('anom.det_abbr')} (
+                          {fmtPercent(item.nrt_percent_of_normal, lang, 0)})
+                        </span>
+                      )}
+                      {auth?.portal && (
+                        <a
+                          href={auth.portal}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-sans font-medium text-ink underline underline-offset-2"
+                        >
+                          {auth.code} ↗
+                        </a>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Desktop table: clicking anywhere on the row focuses that territory across the page */}
+            <div className="mt-4 hidden max-h-[26rem] overflow-auto border-t border-line sm:block">
+              <table className="w-full border-collapse text-left text-sm">
+                <thead className="sticky top-0 z-10 border-b border-line bg-graphite-800 text-xs text-ink-mute">
+                  <tr>
+                    {(
+                      [
+                        { key: 'territory', label: t('anom.col_territory'), align: 'left' },
+                        { key: 'level', label: t('anom.col_level'), align: 'left' },
+                        { key: 'ratio', label: t('anom.col_ratio'), align: 'right' },
+                        { key: 'z', label: t('anom.col_sigma'), align: 'right' },
+                        { key: 'nrt', label: t('anom.col_nrt'), align: 'right' },
+                        { key: 'authority', label: t('anom.col_authority'), align: 'left' },
+                      ] as const
+                    ).map((col) => (
+                      <th
+                        key={col.key}
+                        aria-sort={ariaSort(col.key)}
+                        className={`py-2.5 pr-3 font-medium uppercase tracking-wider ${
+                          col.align === 'right' ? 'text-right' : 'text-left'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(col.key)}
+                          className="inline-flex items-center gap-1 hover:text-ink"
+                        >
+                          <span>{col.label}</span>
+                          <span aria-hidden>{sortMark(col.key)}</span>
+                        </button>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line/60">
+                  {directoryItems.map((item) => {
+                    const st = severityStyle(item.severity);
+                    const auth = item.authorities[0];
+                    const label = lang === 'es' ? item.severity_label_es : item.severity_label_en;
+                    return (
+                      <tr
+                        key={item.aoi_id}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`${item.region_name} — ${label}`}
+                        onClick={() => void focusAlertTerritory(item)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            void focusAlertTerritory(item);
+                          }
+                        }}
+                        className={`cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-cream ${
+                          item.aoi_id === aoi.id ? 'bg-accent/15' : 'hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        <td className="py-3 pl-2 pr-3 font-semibold text-ink">{item.region_name}</td>
+                        <td className="whitespace-nowrap py-3 pr-3 text-ink">
+                          <span className="inline-flex items-center gap-1.5 font-medium">
+                            <i aria-hidden className={`h-2 w-2 rounded-full ${st.dot}`} />
+                            <span aria-hidden className="text-xs leading-none">
+                              {st.symbol}
+                            </span>
+                            {label}
+                          </span>
+                        </td>
+                        <td className="data whitespace-nowrap py-3 pr-3 text-right text-ink">
+                          {fmtRatio(item.anomaly_ratio, lang, 2)}
+                        </td>
+                        <td className="data whitespace-nowrap py-3 pr-3 text-right text-ink-dim">
+                          {fmtSigma(item.z_score, lang, 2)}
+                        </td>
+                        <td
+                          className={`data whitespace-nowrap py-3 pr-3 text-right ${
+                            (item.nrt_percent_of_normal ?? 0) >= 200
+                              ? 'font-semibold text-sev-warning'
+                              : 'text-ink-dim'
+                          }`}
+                        >
+                          {item.nrt_detections != null && item.nrt_percent_of_normal != null
+                            ? `${fmtInt(item.nrt_detections, lang)} ${t('anom.det_abbr')} · ${fmtPercent(item.nrt_percent_of_normal, lang, 0)}`
+                            : '—'}
+                        </td>
+                        <td className="py-3 pr-2 text-xs">
+                          {auth ? (
+                            auth.portal ? (
+                              <a
+                                href={auth.portal}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={auth.name}
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 font-medium text-ink underline-offset-2 hover:text-accent hover:underline"
+                              >
+                                <span>{auth.code}</span>
+                                <span aria-hidden>↗</span>
+                              </a>
+                            ) : (
+                              <span title={auth.name} className="text-ink-dim">
+                                {auth.code}
+                              </span>
+                            )
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </article>
+
+      {/* 2. Borderless guide explaining warning levels & statistical indicators */}
+      <WarningGuideCard />
+
+      {/* 3. Active Territory Summary Strip */}
+      <div className="mt-12 border-t border-line pt-10 text-left">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <h3 className="font-display text-2xl text-ink sm:text-3xl">{aoiName}</h3>
           {alert && (
-            <span className="chip text-ink">
-              <i aria-hidden className={`h-2 w-2 rounded-full ${severityDotClass(alert.severity)}`} />
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border bg-cream-deep/60 px-3 py-1 text-xs font-medium text-ink ${severityStyle(alert.severity).border}`}
+            >
+              <i aria-hidden className={`h-2.5 w-2.5 rounded-full ring-1 ring-ink/15 ${severityStyle(alert.severity).dot}`} />
+              <span aria-hidden className="text-xs leading-none">
+                {severityStyle(alert.severity).symbol}
+              </span>
               <span>{lang === 'es' ? alert.severity_label_es : alert.severity_label_en}</span>
             </span>
           )}
-          {stripPhase && stripPhaseLabel && (
-            <span className="chip text-ink">
-              <i aria-hidden className={`h-2 w-2 rounded-full ${ensoDotClass(stripPhase)}`} />
+          {showEnso && stripPhase && stripPhaseLabel && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-cream-deep/60 px-3 py-1 text-xs font-medium text-ink">
+              <i aria-hidden className={`h-2.5 w-2.5 rounded-full ${ensoDotClass(stripPhase)}`} />
               <span>
                 {stripPhaseLabel}
                 {stripOni != null && (
@@ -310,18 +581,16 @@ export function Anomalies() {
           <div className="mt-2.5">
             <Spinner label={t('common.loading')} />
           </div>
-        ) : alert ? (
+        ) : alert && alertBar ? (
           <p className="mt-2.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-sm text-ink-dim">
-            <span className="data text-ink">
+            <span className="font-medium text-ink">{alertBar.deltaLabel}</span>
+            <span aria-hidden>·</span>
+            <span className="data">
               {t('anom.card_counts', {
                 latest: fmtInt(Math.round(alert.latest_harmonized), lang),
                 normal: fmtInt(Math.round(alert.climatology_median), lang),
               })}
             </span>
-            <span aria-hidden>·</span>
-            <span className="data">{fmtSigma(alert.z_score, lang, 2)}</span>
-            <span aria-hidden>·</span>
-            <span className="data">{fmtRatio(alert.anomaly_ratio, lang, 2)}</span>
             {alert.nrt_detections != null && alert.nrt_percent_of_normal != null && (
               <>
                 <span aria-hidden>·</span>
@@ -343,8 +612,8 @@ export function Anomalies() {
         ) : null}
       </div>
 
-      {/* Typical critical season + Most unusual periods in one calm two-column panel */}
-      <article className="panel p-5 sm:p-6">
+      {/* 4. Typical critical season + Most unusual periods chart panel */}
+      <article className="panel mt-6 p-5 sm:p-6">
         <div className="grid gap-8 lg:grid-cols-[1fr_1.3fr] lg:gap-10">
           <div className="min-w-0">
             <h3 className="text-lg font-semibold text-ink">{t('anom.season_title')}</h3>
@@ -408,7 +677,7 @@ export function Anomalies() {
                   const pos = a.zScore > 0;
                   const w = (Math.abs(a.zScore) / zMax) * 50;
                   const same = a.start.slice(0, 7) === a.end.slice(0, 7);
-                  const ensoPhase = phaseForMonth(a.start);
+                  const ensoPhase = showEnso ? phaseForMonth(a.start) : null;
                   return (
                     <li key={a.start + a.end}>
                       <button
@@ -451,213 +720,228 @@ export function Anomalies() {
         </div>
       </article>
 
-      <EnsoPanel aoiName={aoiName} lang={lang} data={ensoQ.data} isPending={ensoQ.isPending} isError={ensoQ.isError} />
+      {/* 5. El Niño / La Niña teleconnection chart — strictly hidden outside Pacific ENSO-affected territories */}
+      {showEnso && (
+        <EnsoPanel aoiName={aoiName} lang={lang} data={ensoQ.data} isPending={ensoQ.isPending} isError={ensoQ.isError} />
+      )}
 
-      {/* Deterministic Early-Warning Alert Panel with header + progressive tabs */}
-      <article className="panel mt-6 p-5 sm:p-6">
+      {/* 6. Plain-Language Early-Warning Detail integrated directly on cream */}
+      <div className="mt-12 border-t border-line pt-10" aria-labelledby="early-warning-title">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="eyebrow">{t('anom.alert_eyebrow')}</p>
               {alert && (
-                <span className="chip">
-                  {alert.protocol === 'CAP-1.2-deterministic' ? t('anom.protocol_cap') : alert.protocol}
+                <span className="text-xs font-medium text-ink-mute">
+                  · {alert.protocol === 'CAP-1.2-deterministic' ? t('anom.protocol_cap') : alert.protocol}
                 </span>
               )}
             </div>
-            <h3 className="card-title mt-1.5 text-lg">
-              {t('anom.alert_title')} — <span className="font-semibold text-ink">{aoiName}</span>
+            <h3 id="early-warning-title" className="mt-1.5 font-display text-2xl text-ink sm:text-3xl">
+              {t('anom.alert_title', { region: alert?.region_name ?? aoiName })}
             </h3>
           </div>
           {alertQ.isError ? (
-            <span className="text-xs text-ink-dim">{t('common.error')}</span>
+            <span className="text-sm text-ink-dim">{t('common.error')}</span>
           ) : alertQ.isLoading ? (
             <Spinner label={t('common.loading')} />
           ) : alert ? (
-            <span className="chip text-ink">
-              <i aria-hidden className={`h-2 w-2 rounded-full ${severityDotClass(alert.severity)}`} />
-              {lang === 'es' ? alert.severity_label_es : alert.severity_label_en}
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border bg-cream-deep/60 px-3 py-1 text-xs font-semibold text-ink ${severityStyle(alert.severity).border}`}
+            >
+              <i aria-hidden className={`h-2.5 w-2.5 rounded-full ring-1 ring-ink/15 ${severityStyle(alert.severity).dot}`} />
+              <span aria-hidden className="text-xs leading-none">
+                {severityStyle(alert.severity).symbol}
+              </span>
+              <span>{lang === 'es' ? alert.severity_label_es : alert.severity_label_en}</span>
             </span>
           ) : null}
         </div>
 
-        {alert && (
-          <div className="mt-5 space-y-6">
-            <p className="text-sm font-medium text-ink">
-              {lang === 'es' ? alert.headline_es : alert.headline_en}
-            </p>
+        {alert && alertBar && (
+          <div className="mt-6 space-y-8">
+            <div>
+              <p className="text-base font-medium text-ink">{t(`anom.alert_sev_desc_${alert.severity}`)}</p>
+              <p className="mt-1 text-sm leading-relaxed text-ink-dim">
+                {lang === 'es' ? alert.headline_es : alert.headline_en}
+              </p>
 
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
-              <div>
-                <dt className="text-xs text-ink-mute">{t('cal.anomaly')}</dt>
-                <dd className="data mt-0.5 text-sm text-ink">{fmtSigma(alert.z_score, lang, 2)}</dd>
+              {/* Visual comparison bar against 26-year historical normal & p90 */}
+              <div className="mt-5 max-w-3xl">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-ink-dim">
+                  <span>{t('anom.alert_bar_label')}</span>
+                  <span className="font-semibold text-ink">{alertBar.deltaLabel}</span>
+                </div>
+                <div className="relative mt-2 h-3 w-full overflow-hidden rounded-full bg-cream-deep">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${severityStyle(alert.severity).dot}`}
+                    style={{ width: `${Math.max(alertBar.obsPct, 3)}%` }}
+                  />
+                  {alert.climatology_median > 0 && (
+                    <span
+                      title={t('anom.alert_bar_typical')}
+                      className="absolute inset-y-0 w-0.5 bg-ink"
+                      style={{ left: `${alertBar.medPct}%` }}
+                    />
+                  )}
+                  {alert.climatology_p90 > 0 && (
+                    <span
+                      title={t('anom.alert_bar_extreme')}
+                      className="absolute inset-y-0 w-0.5 bg-sev-critical"
+                      style={{ left: `${alertBar.p90Pct}%` }}
+                    />
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-dim">
+                  <span>
+                    <strong className="text-ink">{t('anom.alert_bar_observed')}:</strong>{' '}
+                    <span className="data">{fmtInt(Math.round(alert.latest_harmonized), lang)}</span>
+                  </span>
+                  <span>
+                    <strong className="text-ink">{t('anom.alert_bar_typical')}:</strong>{' '}
+                    <span className="data">{fmtInt(Math.round(alert.climatology_median), lang)}</span>
+                  </span>
+                  <span>
+                    <strong className="text-ink">{t('anom.alert_bar_extreme')}:</strong>{' '}
+                    <span className="data">{fmtInt(Math.round(alert.climatology_p90), lang)}</span>
+                  </span>
+                </div>
               </div>
-              <div>
+            </div>
+
+            {/* Clean borderless key indicators on cream */}
+            <dl
+              className={`grid gap-6 border-y border-line/60 py-5 sm:grid-cols-2 ${
+                showEnso ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
+              }`}
+            >
+              <div className="border-l-2 border-line pl-3.5">
                 <dt className="text-xs text-ink-mute">{t('anom.alert_ratio')}</dt>
-                <dd className="data mt-0.5 text-sm text-ink">{fmtRatio(alert.anomaly_ratio, lang, 2)}</dd>
+                <dd className="data mt-1 text-lg font-semibold text-ink">{fmtRatio(alert.anomaly_ratio, lang, 2)}</dd>
+                <dd className="mt-0.5 text-xs text-ink-dim">{alertBar.deltaLabel}</dd>
               </div>
-              <div>
-                <dt className="text-xs text-ink-mute">{t('anom.alert_persist')}</dt>
-                <dd className="data mt-0.5 text-sm text-ink">
+
+              <div className="border-l-2 border-line pl-3.5">
+                <dt className="text-xs text-ink-mute">{t('anom.alert_trend')}</dt>
+                <dd className="mt-1 text-lg font-semibold text-ink">{t(`anom.alert_trend_${alert.trend_direction}`)}</dd>
+                <dd className="data mt-0.5 text-xs text-ink-dim">
                   {alert.persistence_months === 1
                     ? t('anom.alert_month_1')
                     : t('anom.alert_months_n', { n: fmtInt(alert.persistence_months, lang) })}
+                  {alert.unseasonal ? ` · ${t('anom.alert_unseasonal')}` : ''}
                 </dd>
               </div>
-              <div>
-                <dt className="text-xs text-ink-mute">{t('anom.alert_trend')}</dt>
-                <dd className="mt-0.5 text-sm text-ink">{t(`anom.alert_trend_${alert.trend_direction}`)}</dd>
+
+              <div className="border-l-2 border-line pl-3.5">
+                <dt className="text-xs text-ink-mute">{t('anom.col_sigma')}</dt>
+                <dd className="data mt-1 text-lg font-semibold text-ink">{fmtSigma(alert.z_score, lang, 2)}</dd>
+                <dd className="mt-0.5 text-xs text-ink-dim capitalize">{zPlainLabel(alert.z_score)}</dd>
               </div>
-              <div>
-                <dt className="text-xs text-ink-mute">{t('anom.alert_enso')}</dt>
-                <dd className="data mt-0.5 text-sm text-ink">
-                  {t(`enso.phase_${alert.enso_phase}` as Key)}
-                  {alert.oni_value != null ? ` (${fmtTempC(alert.oni_value, lang, 2)})` : ''}
+
+              <div className="border-l-2 border-line pl-3.5">
+                <dt className="text-xs text-ink-mute">{t('anom.alert_nrt')}</dt>
+                <dd
+                  className={`data mt-1 text-lg font-semibold ${
+                    (alert.nrt_percent_of_normal ?? 0) >= 200 ? 'text-sev-warning' : 'text-ink'
+                  }`}
+                >
+                  {alert.nrt_detections != null ? `${fmtInt(alert.nrt_detections, lang)} ${t('anom.det_abbr')}` : '—'}
+                </dd>
+                <dd className="data mt-0.5 text-xs text-ink-dim">
+                  {alert.nrt_percent_of_normal != null
+                    ? `${fmtPercent(alert.nrt_percent_of_normal, lang, 0)} ${t('anom.alert_ratio').toLowerCase()}`
+                    : '—'}
                 </dd>
               </div>
-              {alert.unseasonal && (
-                <div>
-                  <dt className="text-xs text-ink-mute">{t('anom.season_title')}</dt>
-                  <dd className="mt-0.5 text-sm text-ink">{t('anom.alert_unseasonal')}</dd>
-                </div>
-              )}
-              {(alert.nrt_detections != null || alert.nrt_percent_of_normal != null) && (
-                <div>
-                  <dt className="text-xs text-ink-mute">{t('anom.alert_nrt')}</dt>
-                  <dd
-                    className={`data mt-0.5 text-sm ${
-                      (alert.nrt_percent_of_normal ?? 0) >= 200 ? 'font-semibold text-sev-warning' : 'text-ink'
-                    }`}
-                  >
-                    {alert.nrt_detections != null ? `${fmtInt(alert.nrt_detections, lang)} ${t('anom.det_abbr')}` : ''}
-                    {alert.nrt_detections != null && alert.nrt_percent_of_normal != null ? ' · ' : ''}
-                    {alert.nrt_percent_of_normal != null ? fmtPercent(alert.nrt_percent_of_normal, lang, 0) : ''}
+
+              {showEnso && (
+                <div className="border-l-2 border-line pl-3.5">
+                  <dt className="text-xs text-ink-mute">{t('anom.alert_enso')}</dt>
+                  <dd className="mt-1 text-lg font-semibold text-ink">{t(`enso.phase_${alert.enso_phase}` as Key)}</dd>
+                  <dd className="data mt-0.5 text-xs text-ink-dim">
+                    {alert.oni_value != null ? `ONI ${fmtTempC(alert.oni_value, lang, 2)}` : 'NOAA CPC'}
                   </dd>
                 </div>
               )}
             </dl>
 
-            <div className="border-t border-line pt-5">
-              <div
-                role="tablist"
-                aria-label={t('anom.alert_tabs_aria')}
-                className="inline-flex flex-wrap rounded-lg border border-line bg-graphite-900/70 p-0.5"
-              >
-                {(
-                  [
-                    { id: 'summary', label: t('anom.tab_summary') },
-                    { id: 'authorities', label: t('anom.tab_authorities') },
-                    { id: 'location', label: t('anom.tab_location') },
-                  ] as const
-                ).map((item) => {
-                  const active = alertTab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      id={`alert-tab-${item.id}`}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      aria-controls={`alert-panel-${item.id}`}
-                      onClick={() => setAlertTab(item.id)}
-                      className={`min-h-10 rounded-md px-3 text-xs font-semibold transition-colors duration-200 ${
-                        active ? 'bg-cream text-coal' : 'text-ink-dim hover:bg-graphite-700 hover:text-ink'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
+            {/* Two-column editorial details matching Methodology layout: Actions + Scientific Breakdown | Authorities + Visitor Location */}
+            <div className="grid gap-8 lg:grid-cols-2 lg:gap-12">
+              <div className="space-y-6">
+                <div>
+                  <p className="eyebrow">{t('anom.alert_actions')}</p>
+                  <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink-dim">
+                    {(lang === 'es' ? alert.recommended_actions_es : alert.recommended_actions_en).map((step, idx) => (
+                      <li key={idx} className="flex gap-2.5">
+                        <span className="data text-ink-mute">{idx + 1}.</span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
 
-              {alertTab === 'summary' && (
-                <div
-                  id="alert-panel-summary"
-                  role="tabpanel"
-                  aria-labelledby="alert-tab-summary"
-                  className="mt-5 space-y-5"
-                >
-                  <p className="text-sm leading-relaxed text-ink-dim">
+                <details className="group border-t border-line/60 pt-4">
+                  <summary className="cursor-pointer select-none list-none text-xs font-semibold text-ink hover:opacity-80">
+                    <span className="mr-1.5 inline-block transition-transform duration-200 group-open:rotate-90">▸</span>
+                    {t('anom.alert_tech_toggle')}
+                  </summary>
+                  <p className="mt-3 border-l-2 border-line pl-3.5 text-sm leading-relaxed text-ink-dim">
                     {lang === 'es' ? alert.technical_summary_es : alert.technical_summary_en}
                   </p>
-                  <div className="border-t border-line/60 pt-4">
-                    <p className="eyebrow">{t('anom.alert_actions')}</p>
-                    <ul className="mt-2.5 space-y-2 text-sm leading-relaxed text-ink-dim">
-                      {(lang === 'es' ? alert.recommended_actions_es : alert.recommended_actions_en).map((step, idx) => (
-                        <li key={idx} className="flex gap-2.5">
-                          <span className="data text-ink-mute">{idx + 1}.</span>
-                          <span>{step}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
+                </details>
+              </div>
 
-              {alertTab === 'authorities' && (
-                <div
-                  id="alert-panel-authorities"
-                  role="tabpanel"
-                  aria-labelledby="alert-tab-authorities"
-                  className="mt-5"
-                >
+              <div className="space-y-6">
+                <div>
                   <p className="eyebrow">{t('anom.alert_authorities')}</p>
-                  <ul className="mt-3 divide-y divide-line/60">
+                  <ul className="mt-3 divide-y divide-line/60 border-t border-line/60">
                     {alert.authorities.map((auth) => (
-                      <li key={auth.code} className="py-3 first:pt-0 last:pb-0">
+                      <li key={auth.code} className="py-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-sm font-semibold text-ink">{auth.code}</span>
+                          <span className="text-sm font-semibold text-ink">
+                            {auth.code} — {auth.name}
+                          </span>
                           {auth.portal && (
                             <a
                               href={auth.portal}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-xs text-ink-dim underline-offset-2 hover:text-ink hover:underline"
+                              className="inline-flex min-h-8 items-center rounded-md border border-line px-3 py-1 text-xs font-semibold text-ink transition-colors hover:border-ink hover:bg-cream-deep/60"
                             >
                               {t('anom.alert_portal')} ↗
                             </a>
                           )}
                         </div>
-                        <p className="mt-0.5 text-xs font-medium text-ink-dim">{auth.name}</p>
-                        <p className="mt-1 text-xs leading-relaxed text-ink-mute">
+                        <p className="mt-1 text-xs leading-relaxed text-ink-dim">
                           {lang === 'es' ? auth.role_es : auth.role_en}
                         </p>
                       </li>
                     ))}
                   </ul>
                 </div>
-              )}
 
-              {alertTab === 'location' && (
-                <div
-                  id="alert-panel-location"
-                  role="tabpanel"
-                  aria-labelledby="alert-tab-location"
-                  className="mt-5 flex flex-wrap items-center justify-between gap-4"
-                >
-                  <div className="space-y-1.5">
+                {/* Compact visitor location & GPS inspection bar */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/60 pt-4">
+                  <div className="space-y-0.5">
                     <p className="eyebrow">{t('anom.loc_detected')}</p>
                     {visitorQ.isLoading ? (
                       <Spinner label={t('common.loading')} />
                     ) : visitorQ.data ? (
-                      <div className="flex flex-wrap items-center gap-2.5 text-sm">
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
                         <strong className="font-semibold text-ink">{visitorQ.data.region_name}</strong>
-                        <span className="chip text-ink">
-                          <i aria-hidden className={`h-1.5 w-1.5 rounded-full ${severityDotClass(visitorQ.data.severity)}`} />
-                          {lang === 'es' ? visitorQ.data.severity_label_es : visitorQ.data.severity_label_en}
+                        <span className="text-ink-dim">
+                          ({lang === 'es' ? visitorQ.data.severity_label_es : visitorQ.data.severity_label_en} ·{' '}
+                          <span className="data">{fmtSigma(visitorQ.data.z_score, lang, 2)}</span>)
                         </span>
-                        <span className="data text-xs text-ink-dim">({fmtSigma(visitorQ.data.z_score, lang, 2)})</span>
                       </div>
-                    ) : (
-                      <p className="text-xs text-ink-dim">{t('common.error')}</p>
-                    )}
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {visitorQ.data && visitorQ.data.aoi_id !== aoi.id && (
                       <button
                         type="button"
                         onClick={() => void focusAlertTerritory(visitorQ.data)}
-                        className="btn btn-sm"
+                        className="inline-flex min-h-8 items-center rounded-md border border-line px-3 py-1 text-xs font-semibold text-ink transition-colors hover:border-ink hover:bg-cream-deep/60"
                       >
                         {t('anom.loc_fly')}
                       </button>
@@ -666,213 +950,27 @@ export function Anomalies() {
                       type="button"
                       onClick={requestGpsLocation}
                       disabled={gpsStatus === 'loading'}
-                      className="btn btn-sm"
+                      className="inline-flex min-h-8 items-center rounded-md border border-line px-3 py-1 text-xs font-semibold text-ink transition-colors hover:border-ink hover:bg-cream-deep/60"
                     >
                       {gpsStatus === 'loading' ? t('common.loading') : t('anom.loc_gps')}
                     </button>
                     {gpsStatus === 'denied' && <span className="text-xs text-ink-dim">{t('anom.loc_gps_denied')}</span>}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
         )}
-      </article>
+      </div>
 
-      {/* Interactive Country & Colombia Departments Alert Monitor (compact sortable table) */}
-      <article className="panel mt-6 p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h4 className="card-title text-lg">{t('anom.dir_title')}</h4>
-            <p className="mt-0.5 text-xs text-ink-dim">{t('anom.dir_lead')}</p>
-          </div>
-          <Segmented<'countries' | 'colombia'>
-            size="sm"
-            label={t('anom.dir_title')}
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: 'countries', label: `${t('anom.tab_countries')} (${overviewQ.data?.countries.length ?? 0})` },
-              { value: 'colombia', label: `${t('anom.tab_colombia')} (${overviewQ.data?.colombia.length ?? 0})` },
-            ]}
-          />
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              type="search"
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-              placeholder={t('anom.filter_ph')}
-              className="input max-w-xs !py-1.5 text-xs"
-            />
-            <label className="tap flex cursor-pointer items-center gap-2 text-xs text-ink-dim">
-              <input
-                type="checkbox"
-                checked={activeOnly}
-                onChange={(e) => setActiveOnly(e.target.checked)}
-                className="h-4 w-4 accent-accent"
-              />
-              {t('anom.active_only')}
-            </label>
-          </div>
-
-          <label className="flex items-center gap-2 text-xs text-ink-dim sm:hidden">
-            <span>{t('anom.sort_by')}</span>
-            <select
-              value={sortKey}
-              onChange={(e) => {
-                const next = e.target.value as SortKey;
-                setSortKey(next);
-                setSortDir(next === 'territory' || next === 'authority' ? 'asc' : 'desc');
-              }}
-              className="input min-h-8 w-auto py-1 text-xs"
-            >
-              <option value="level">{t('anom.col_level')}</option>
-              <option value="z">{t('anom.col_sigma')}</option>
-              <option value="ratio">{t('anom.col_ratio')}</option>
-              <option value="nrt">{t('anom.col_nrt')}</option>
-              <option value="territory">{t('anom.col_territory')}</option>
-            </select>
-          </label>
-        </div>
-
-        {overviewQ.isLoading ? (
-          <div className="mt-6 flex justify-center py-8">
-            <Spinner label={t('common.loading')} />
-          </div>
-        ) : directoryItems.length === 0 ? (
-          <p className="mt-6 text-sm text-ink-dim">{t('anom.dir_empty')}</p>
-        ) : (
-          <>
-            {/* Compact two-line rows on < 640px */}
-            <ul className="mt-4 max-h-96 divide-y divide-line/60 overflow-y-auto border-t border-line sm:hidden">
-              {directoryItems.map((item) => (
-                <li key={item.aoi_id}>
-                  <button
-                    type="button"
-                    onClick={() => void focusAlertTerritory(item)}
-                    className={`w-full px-1 py-2.5 text-left transition-colors ${
-                      item.aoi_id === aoi.id ? 'bg-accent/10' : 'hover:bg-white/[0.04]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-semibold text-ink">{item.region_name}</span>
-                      <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-ink">
-                        <i aria-hidden className={`h-2 w-2 rounded-full ${severityDotClass(item.severity)}`} />
-                        {lang === 'es' ? item.severity_label_es : item.severity_label_en}
-                      </span>
-                    </div>
-                    <div className="data mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-dim">
-                      <span>{fmtSigma(item.z_score, lang, 2)}</span>
-                      <span>· {fmtRatio(item.anomaly_ratio, lang, 2)}</span>
-                      {item.nrt_detections != null && item.nrt_percent_of_normal != null && (
-                        <span className={item.nrt_percent_of_normal >= 200 ? 'font-semibold text-sev-warning' : ''}>
-                          · {fmtInt(item.nrt_detections, lang)} {t('anom.det_abbr')} (
-                          {fmtPercent(item.nrt_percent_of_normal, lang, 0)})
-                        </span>
-                      )}
-                      {item.authorities[0] && (
-                        <span className="basis-full truncate font-sans text-ink-mute">{item.authorities[0].code}</span>
-                      )}
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            {/* Sortable table with sticky header on >= 640px */}
-            <div className="mt-4 hidden max-h-96 overflow-auto border-t border-line sm:block">
-              <table className="w-full border-collapse text-left text-xs">
-                <thead className="sticky top-0 z-10 border-b border-line bg-graphite-800 text-ink-mute">
-                  <tr>
-                    {(
-                      [
-                        { key: 'territory', label: t('anom.col_territory'), align: 'left' },
-                        { key: 'level', label: t('anom.col_level'), align: 'left' },
-                        { key: 'z', label: t('anom.col_sigma'), align: 'right' },
-                        { key: 'ratio', label: t('anom.col_ratio'), align: 'right' },
-                        { key: 'nrt', label: t('anom.col_nrt'), align: 'right' },
-                        { key: 'authority', label: t('anom.col_authority'), align: 'left' },
-                      ] as const
-                    ).map((col) => (
-                      <th
-                        key={col.key}
-                        aria-sort={ariaSort(col.key)}
-                        className={`py-2.5 pr-3 font-medium uppercase tracking-wider ${
-                          col.align === 'right' ? 'text-right' : 'text-left'
-                        }`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => toggleSort(col.key)}
-                          className="inline-flex items-center gap-1 hover:text-ink"
-                        >
-                          <span>{col.label}</span>
-                          <span aria-hidden className="text-xs">
-                            {sortMark(col.key)}
-                          </span>
-                        </button>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line/60">
-                  {directoryItems.map((item) => (
-                    <tr
-                      key={item.aoi_id}
-                      onClick={() => void focusAlertTerritory(item)}
-                      className={`cursor-pointer transition-colors ${
-                        item.aoi_id === aoi.id ? 'bg-accent/10' : 'hover:bg-white/[0.04]'
-                      }`}
-                    >
-                      <td className="py-2.5 pr-3 font-semibold text-ink">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void focusAlertTerritory(item);
-                          }}
-                          className="text-left hover:underline"
-                        >
-                          {item.region_name}
-                        </button>
-                      </td>
-                      <td className="whitespace-nowrap py-2.5 pr-3 text-ink">
-                        <span className="inline-flex items-center gap-1.5">
-                          <i aria-hidden className={`h-2 w-2 rounded-full ${severityDotClass(item.severity)}`} />
-                          {lang === 'es' ? item.severity_label_es : item.severity_label_en}
-                        </span>
-                      </td>
-                      <td className="data whitespace-nowrap py-2.5 pr-3 text-right text-ink">
-                        {fmtSigma(item.z_score, lang, 2)}
-                      </td>
-                      <td className="data whitespace-nowrap py-2.5 pr-3 text-right text-ink-dim">
-                        {fmtRatio(item.anomaly_ratio, lang, 2)}
-                      </td>
-                      <td
-                        className={`data whitespace-nowrap py-2.5 pr-3 text-right ${
-                          (item.nrt_percent_of_normal ?? 0) >= 200
-                            ? 'font-semibold text-sev-warning'
-                            : 'text-ink-dim'
-                        }`}
-                      >
-                        {item.nrt_detections != null && item.nrt_percent_of_normal != null
-                          ? `${fmtInt(item.nrt_detections, lang)} ${t('anom.det_abbr')} · ${fmtPercent(item.nrt_percent_of_normal, lang, 0)}`
-                          : '—'}
-                      </td>
-                      <td className="max-w-[13rem] truncate py-2.5 text-ink-mute">
-                        {item.authorities[0]?.code ?? '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </article>
+      {/* 7. Borderless SMTP email newsletter subscription integrated on cream */}
+      <NewsletterCard
+        currentAoiId={aoi.id}
+        currentAoiName={aoiName}
+        countries={countriesList}
+        alerts={activeAlerts}
+        lang={lang}
+      />
     </section>
   );
 }

@@ -96,6 +96,7 @@ export type EnsoPhaseStats = {
 };
 
 export type EnsoResponse = {
+  relevant?: boolean;
   current: {
     month: string | null;
     oni: number | null;
@@ -132,6 +133,7 @@ export type AlertAssessment = {
   region_name: string;
   department: string | null;
   country: string | null;
+  bbox?: BBox | null;
   severity: 'CRITICAL' | 'WARNING' | 'WATCH' | 'NORMAL';
   severity_rank: number;
   severity_label_es: string;
@@ -160,11 +162,42 @@ export type AlertAssessment = {
   recommended_actions_en: string[];
   authorities: AlertAuthority[];
   protocol: string;
+  enso_relevant?: boolean;
+  active_subalerts_count?: number;
+  max_subalert_severity?: AlertAssessment['severity'] | null;
 };
 
 export type AlertsOverview = {
   countries: AlertAssessment[];
   colombia: AlertAssessment[];
+};
+
+export type AlertSubscriptionRequest = {
+  email: string;
+  name?: string;
+  aoi_id: string;
+  min_severity: AlertAssessment['severity'];
+  lang: 'es' | 'en';
+  send_immediate_report?: boolean;
+};
+
+export type AlertSubscriptionResponse = {
+  status: 'sent' | 'subscribed_smtp_pending' | 'subscribed_error';
+  email: string;
+  aoi_id: string;
+  region_name: string;
+  severity: AlertAssessment['severity'];
+  smtp_configured: boolean;
+  message_es: string;
+  message_en: string;
+};
+
+export type SmtpStatusResponse = {
+  configured: boolean;
+  host: string | null;
+  port: number;
+  from_email: string | null;
+  subscribers_count: number;
 };
 
 // ---- Frontend-only derived shapes (not part of the API) ----

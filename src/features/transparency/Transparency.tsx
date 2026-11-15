@@ -4,6 +4,7 @@ import { useT, type Key } from '@/app/i18n';
 import { useCalendar } from '@/app/loaders';
 import { Formula, Frac, Fn, Op, Paren, Sub, Sup, V } from '@/components/math';
 import { Reveal, SectionHeading } from '@/components/ui';
+import { isEnsoRelevantAoi } from '@/features/anomalies/alertMeta';
 import { api } from '@/lib/api';
 import { CHART, SENSOR_COLOR, SEV_COLOR } from '@/lib/colors';
 import { fmtDec, fmtInt, fmtRatio, fmtSigma, fmtSigned, fmtTempC } from '@/lib/format';
@@ -409,6 +410,7 @@ export function Transparency() {
 
   const meta = monthly.data?.response.meta;
   const alert = alertQ.data;
+  const showEnso = isEnsoRelevantAoi(aoi, alert);
 
   return (
     <section id="transparency" className="section" aria-labelledby="transparency-title">
@@ -470,7 +472,9 @@ export function Transparency() {
         <Stat
           label={t('trans.live_oni')}
           value={
-            alert ? (
+            !showEnso ? (
+              <span className="block font-sans text-base font-medium leading-snug text-ink-dim">{t('trans.enso_na')}</span>
+            ) : alert ? (
               <>
                 {t(`enso.phase_${alert.enso_phase}` as Key)}
                 {alert.oni_value != null && <span className="ml-1.5 text-sm font-normal text-ink-dim">({fmtTempC(alert.oni_value, lang, 2)})</span>}

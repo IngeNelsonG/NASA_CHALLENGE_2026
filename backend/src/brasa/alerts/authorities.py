@@ -234,16 +234,6 @@ INTERNATIONAL_AUTHORITIES: dict[str, tuple[str, str, str | None]] = {
         ),
         "https://www.argentina.gob.ar/ambiente/fuego",
     ),
-    "Brazil": (
-        "IBAMA-PREVFOGO / INPE",
-        "Centro Nacional de Prevenção e Combate aos Incêndios Florestais & INPE Queimadas",
-        "https://terrabrasilis.dpi.inpe.br/queimadas/",
-    ),
-    "United States": (
-        "NIFC / USFS",
-        "National Interagency Fire Center & USDA Forest Service",
-        "https://www.nifc.gov",
-    ),
     "Australia": (
         "AFAC / NEMA",
         (
@@ -251,6 +241,51 @@ INTERNATIONAL_AUTHORITIES: dict[str, tuple[str, str, str | None]] = {
             "National Emergency Management Agency"
         ),
         "https://www.afac.com.au",
+    ),
+    "Austria": (
+        "BML / BMI Civil Protection",
+        "Federal Ministry of Agriculture, Forestry & Austrian Civil Protection",
+        "https://www.bml.gv.at",
+    ),
+    "Bangladesh": (
+        "BFD / DDM",
+        "Bangladesh Forest Department & Department of Disaster Management",
+        "https://bforest.gov.bd",
+    ),
+    "Bolivia": (
+        "ABT / VIDECI",
+        "Autoridad de Fiscalización y Control Social de Bosques y Tierra & Defensa Civil",
+        "https://www.abt.gob.bo",
+    ),
+    "Botswana": (
+        "DFRR / NDMO",
+        "Department of Forestry and Range Resources & National Disaster Management",
+        "https://www.gov.bw",
+    ),
+    "Brazil": (
+        "IBAMA-PREVFOGO / INPE",
+        "Centro Nacional de Prevenção e Combate aos Incêndios Florestais & INPE Queimadas",
+        "https://terrabrasilis.dpi.inpe.br/queimadas/",
+    ),
+    "Bulgaria": (
+        "EFA / DGFSCP",
+        "Executive Forest Agency & Fire Safety and Civil Protection Directorate",
+        "https://www.iag.bg",
+    ),
+    "Cambodia": (
+        "FA / NCDM",
+        "Forestry Administration & National Committee for Disaster Management",
+        "https://www.ncdm.gov.kh",
+    ),
+    "Cameroon": (
+        "MINFOF / DPC",
+        "Ministry of Forestry and Wildlife & Directorate of Civil Protection",
+        "https://www.minfof.cm",
+    ),
+    "Canada": (
+        "CIFFC / CWFIS",
+        "Canadian Interagency Forest Fire Centre & Canadian Wildland Fire Information System",
+        "https://www.ciffc.ca",
     ),
     "Chile": (
         "CONAF / SENAPRED",
@@ -260,6 +295,228 @@ INTERNATIONAL_AUTHORITIES: dict[str, tuple[str, str, str | None]] = {
         ),
         "https://www.conaf.cl",
     ),
+    "China": (
+        "MEM / NFGA",
+        "Ministry of Emergency Management & National Forestry and Grassland Administration",
+        "https://www.mem.gov.cn",
+    ),
+    "Costa Rica": (
+        "SINAC / CNE",
+        "Sistema Nacional de Áreas de Conservación y Comisión Nacional de Emergencias",
+        "https://www.sinac.go.cr",
+    ),
+    "Croatia": (
+        "HVZ / DUZS",
+        "Croatian Firefighting Association & Civil Protection Directorate",
+        "https://hvz.gov.hr",
+    ),
+    "Cuba": (
+        "CGB / Defensa Civil",
+        "Cuerpo de Guardabosques de Cuba y Estado Mayor Nacional de la Defensa Civil",
+        "https://www.minag.gob.cu",
+    ),
+    "Democratic Republic of the Congo": (
+        "MEDD / CNPC",
+        "Ministère de l'Environnement et Développement Durable & Protection Civile",
+        "https://www.medd.gouv.cd",
+    ),
+    "Dominican Republic": (
+        "MIMARENA / COE",
+        "Ministerio de Medio Ambiente y Recursos Naturales & Centro de Operaciones de Emergencias",
+        "https://ambiente.gob.do",
+    ),
+    "Ecuador": (
+        "MAATE / SGR",
+        "Ministerio del Ambiente, Agua y Transición Ecológica & Secretaría de Gestión de Riesgos",
+        "https://www.gestionderiesgos.gob.ec",
+    ),
+    "El Salvador": (
+        "MARN / Protección Civil",
+        "Ministerio de Medio Ambiente y Recursos Naturales & Dirección General de Protección Civil",
+        "https://www.proteccioncivil.gob.sv",
+    ),
+    "Ethiopia": (
+        "EFCCC / EDRMC",
+        "Ethiopian Forestry Development & Disaster Risk Management Commission",
+        "https://www.drmc.gov.et",
+    ),
+    "Finland": (
+        "SPEK / Ministry of Interior",
+        "Finnish National Rescue Association & Civil Protection Rescue Services",
+        "https://pelastustoimi.fi",
+    ),
+    "France": (
+        "DGSCGC / BDF-ONF",
+        "Direction Générale de la Sécurité Civile & Office National des Forêts",
+        "https://www.interieur.gouv.fr",
+    ),
+    "Germany": (
+        "BBK / DWD Waldbrand",
+        "Federal Office of Civil Protection and Disaster Assistance & DWD Fire Danger",
+        "https://www.bbk.bund.de",
+    ),
+    "Ghana": (
+        "FC / NADMO",
+        "Forestry Commission of Ghana & National Disaster Management Organisation",
+        "https://www.fcghana.org",
+    ),
+    "Greece": (
+        "GSCP / Hellenic Fire Corps",
+        "General Secretariat for Civil Protection & Hellenic Fire Service",
+        "https://civilprotection.gov.gr",
+    ),
+    "Guatemala": (
+        "CONAP / CONRED",
+        "Consejo Nacional de Áreas Protegidas & "
+        "Coordinadora Nacional para la Reducción de Desastres",
+        "https://conred.gob.gt",
+    ),
+    "Honduras": (
+        "ICF / COPECO",
+        "Instituto de Conservación Forestal & Comisión Permanente de Contingencias",
+        "https://icf.gob.hn",
+    ),
+    "India": (
+        "FSI / NDMA",
+        "Forest Survey of India (Van Agni) & National Disaster Management Authority",
+        "https://fsi.nic.in",
+    ),
+    "Indonesia": (
+        "KLHK SiPongi / BNPB",
+        "Ministry of Environment and Forestry Fire Monitoring & "
+        "National Disaster Mitigation Agency",
+        "https://sipongi.menlhk.go.id",
+    ),
+    "Italy": (
+        "DPC / Vigili del Fuoco",
+        "Dipartimento della Protezione Civile & Corpo Nazionale dei Vigili del Fuoco",
+        "https://www.protezionecivile.gov.it",
+    ),
+    "Japan": (
+        "FDMA / Forestry Agency",
+        "Fire and Disaster Management Agency & Ministry of Agriculture, Forestry and Fisheries",
+        "https://www.fdma.go.jp",
+    ),
+    "Kenya": (
+        "KFS / NDOC",
+        "Kenya Forest Service & National Disaster Operations Centre",
+        "https://www.kenyaforestservice.org",
+    ),
+    "Laos": (
+        "DOF / NDMO",
+        "Department of Forestry & National Disaster Management Office",
+        "https://www.maf.gov.la",
+    ),
+    "Madagascar": (
+        "MEDD / BNGRC",
+        "Ministère de l'Environnement & Bureau National de Gestion des Risques et des Catastrophes",
+        "https://www.bngrc-mid.mg",
+    ),
+    "Malaysia": (
+        "JPSM / NADMA",
+        "Forestry Department Peninsular Malaysia & National Disaster Management Agency",
+        "https://www.nadma.gov.my",
+    ),
+    "Mexico": (
+        "CONAFOR / CNPC",
+        "Comisión Nacional Forestal & Coordinación Nacional de Protección Civil",
+        "https://www.gob.mx/conafor",
+    ),
+    "Morocco": (
+        "ANEF / Protection Civile",
+        "Agence Nationale des Eaux et Forêts & Direction Générale de la Protection Civile",
+        "https://www.eauxetforets.gov.ma",
+    ),
+    "Mozambique": (
+        "DINAF / INGD",
+        "Direcção Nacional de Florestas & Instituto Nacional de Gestão de Risco de Desastres",
+        "https://www.ingd.gov.mz",
+    ),
+    "Myanmar": (
+        "FD / DDM",
+        "Forest Department & Department of Disaster Management",
+        "https://www.forestdepartment.gov.mm",
+    ),
+    "Namibia": (
+        "MEFT / DDRM",
+        "Ministry of Environment, Forestry and Tourism & Disaster Risk Management",
+        "https://www.meft.gov.na",
+    ),
+    "Nepal": (
+        "MoFE / NDRRMA",
+        "Ministry of Forests and Environment & National Disaster Risk Reduction Authority",
+        "https://bipadportal.gov.np",
+    ),
+    "New Zealand": (
+        "FENZ / NEMA",
+        "Fire and Emergency New Zealand & National Emergency Management Agency",
+        "https://www.fireandemergency.nz",
+    ),
+    "Nicaragua": (
+        "INAFOR / SINAPRED",
+        "Instituto Nacional Forestal & Sistema Nacional para la Prevención de Desastres",
+        "https://www.sinapred.gob.ni",
+    ),
+    "Nigeria": (
+        "FDF / NEMA",
+        "Federal Department of Forestry & National Emergency Management Agency",
+        "https://nema.gov.ng",
+    ),
+    "Norway": (
+        "DSB",
+        "Norwegian Directorate for Civil Protection",
+        "https://www.dsb.no",
+    ),
+    "Panama": (
+        "MiAMBIENTE / SINAPROC",
+        "Ministerio de Ambiente & Sistema Nacional de Protección Civil",
+        "https://www.sinaproc.gob.pa",
+    ),
+    "Paraguay": (
+        "INFONA / SEN",
+        "Instituto Forestal Nacional & Secretaría de Emergencia Nacional",
+        "https://infona.gov.py",
+    ),
+    "Peru": (
+        "SERFOR / INDECI / COEN",
+        "Servicio Nacional Forestal y de Fauna Silvestre & Defensa Civil (INDECI)",
+        "https://www.gob.pe/serfor",
+    ),
+    "Philippines": (
+        "DENR-FMB / NDRRMC",
+        "Forest Management Bureau & National Disaster Risk Reduction Council",
+        "https://forestry.denr.gov.ph",
+    ),
+    "Poland": (
+        "LP / PSP",
+        "State Forests National Forest Holding & State Fire Service (PSP)",
+        "https://www.lasy.gov.pl",
+    ),
+    "Portugal": (
+        "ICNF / ANEPC",
+        "Instituto da Conservação da Natureza e das Florestas & Proteção Civil",
+        "https://www.icnf.pt",
+    ),
+    "Romania": (
+        "IGSU / Romsilva",
+        "General Inspectorate for Emergency Situations & National Forest Administration",
+        "https://www.igsu.ro",
+    ),
+    "Russia": (
+        "Avialesookhrana / EMERCOM",
+        "Aerial Forest Fire Centre & Ministry of Emergency Situations",
+        "https://aviales.ru",
+    ),
+    "South Africa": (
+        "DFFE / NDMC",
+        "Department of Forestry, Fisheries and the Environment & National Disaster Management",
+        "https://www.dffe.gov.za",
+    ),
+    "South Korea": (
+        "KFS",
+        "Korea Forest Service — National Forest Fire Information Center",
+        "https://www.forest.go.kr",
+    ),
     "Spain": (
         "MITECO / CENEM",
         (
@@ -268,20 +525,65 @@ INTERNATIONAL_AUTHORITIES: dict[str, tuple[str, str, str | None]] = {
         ),
         "https://www.miteco.gob.es",
     ),
-    "Portugal": (
-        "ICNF / ANEPC",
-        "Instituto da Conservação da Natureza e das Florestas & Proteção Civil",
-        "https://www.icnf.pt",
+    "Sweden": (
+        "MSB",
+        "Swedish Civil Contingencies Agency (Myndigheten för samhällsskydd)",
+        "https://www.msb.se",
     ),
-    "Greece": (
-        "GSCP / Hellenic Fire Corps",
-        "General Secretariat for Civil Protection & Hellenic Fire Service",
-        "https://civilprotection.gov.gr",
+    "Tanzania": (
+        "TFS / PMO-DMD",
+        "Tanzania Forest Services Agency & Disaster Management Department",
+        "https://www.tfs.go.tz",
     ),
-    "Canada": (
-        "CIFFC / CWFIS",
-        "Canadian Interagency Forest Fire Centre & Canadian Wildland Fire Information System",
-        "https://www.ciffc.ca",
+    "Thailand": (
+        "DNP / DDPM",
+        "Department of National Parks & Department of Disaster Prevention and Mitigation",
+        "https://www.dnp.go.th",
+    ),
+    "Turkey": (
+        "OGM / AFAD",
+        "General Directorate of Forestry (Orman Genel Müdürlüğü) & AFAD",
+        "https://www.ogm.gov.tr",
+    ),
+    "Ukraine": (
+        "SESU / SAFR",
+        "State Emergency Service of Ukraine & State Forest Resources Agency",
+        "https://dsns.gov.ua",
+    ),
+    "United Kingdom": (
+        "NFCC / Defra",
+        "National Fire Chiefs Council & UK Met Office Fire Severity Index",
+        "https://nfcc.org.uk",
+    ),
+    "United States": (
+        "NIFC / USFS",
+        "National Interagency Fire Center & USDA Forest Service",
+        "https://www.nifc.gov",
+    ),
+    "Uruguay": (
+        "SINAE / DGF",
+        "Sistema Nacional de Emergencias & Dirección General Forestal",
+        "https://www.gub.uy/sistema-nacional-emergencias/",
+    ),
+    "Venezuela": (
+        "INPARQUES / PCAD",
+        "Instituto Nacional de Parques & Dirección Nacional de Protección Civil",
+        "http://www.inparques.gob.ve",
+    ),
+    "Vietnam": (
+        "VNFOREST / VNDMA",
+        "Vietnam Administration of Forestry & Disaster Management Authority",
+        "https://www.kiemlam.org.vn",
+    ),
+    "Zambia": (
+        "FD / DMMU",
+        "Forestry Department & Disaster Management and Mitigation Unit",
+        "https://www.dmmu.gov.zm",
+    ),
+    "Zimbabwe": (
+        "EMA / DCP",
+        "Environmental Management Agency & Department of Civil Protection",
+        "https://www.ema.co.zw",
     ),
 }
 
@@ -389,6 +691,7 @@ def get_authorities_for_aoi(
                     "National/subnational civil protection and forestry monitoring agency "
                     "with jurisdiction over the selected area."
                 ),
+                portal="https://gwis.jrc.ec.europa.eu",
             )
         )
     return contacts

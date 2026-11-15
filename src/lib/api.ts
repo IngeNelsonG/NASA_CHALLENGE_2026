@@ -3,6 +3,8 @@ import type {
   AOI,
   AoiGeometry,
   AlertAssessment,
+  AlertSubscriptionRequest,
+  AlertSubscriptionResponse,
   AlertsOverview,
   Anomaly,
   BBox,
@@ -13,6 +15,7 @@ import type {
   MonthExplanation,
   RawSensor,
   Resolution,
+  SmtpStatusResponse,
   TLE,
 } from './types';
 
@@ -65,6 +68,19 @@ export const api = {
   enso: (aoi: string, signal?: AbortSignal) => json<EnsoResponse>(`/api/enso?${qs({ aoi })}`, signal),
   alerts: (aoi: string, signal?: AbortSignal) => json<AlertAssessment>(`/api/alerts?${qs({ aoi })}`, signal),
   alertsOverview: (signal?: AbortSignal) => json<AlertsOverview>('/api/alerts/overview', signal),
+  alertRegions: (p: { country: string; active_only?: boolean }, signal?: AbortSignal) =>
+    json<AlertAssessment[]>(
+      `/api/alerts/regions?${qs({ country: p.country, active_only: String(Boolean(p.active_only)) })}`,
+      signal,
+    ),
+  smtpStatus: (signal?: AbortSignal) => json<SmtpStatusResponse>('/api/alerts/smtp-status', signal),
+  subscribeAlerts: (body: AlertSubscriptionRequest, signal?: AbortSignal) =>
+    apiFetch('/api/alerts/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    }).then((r) => r.json() as Promise<AlertSubscriptionResponse>),
   tle: (signal?: AbortSignal) => json<TLE[]>('/api/satellites/tle', signal),
   explainMonth: (p: { aoi: string; month: string; lang: string }, signal?: AbortSignal) =>
     json<MonthExplanation>(`/api/v1/explain?${qs(p)}`, signal),

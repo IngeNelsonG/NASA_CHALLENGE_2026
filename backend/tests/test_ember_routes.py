@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from brasa.alerts.detector import _enso_phase
+from brasa.alerts.detector import _enso_phase, is_enso_relevant
 from brasa.api.app import create_app
 from brasa.api.ember_routes import (
     _compute_enso_payload,
@@ -229,13 +229,56 @@ def test_enso_endpoint_returns_payload_and_404_for_unknown(ember_client: TestCli
     res = ember_client.get("/api/enso", params={"aoi": "co"})
     assert res.status_code == 200
     body = res.json()
-    assert set(body.keys()) == {"current", "series", "episodes", "impact"}
+    assert set(body.keys()) == {"current", "series", "episodes", "impact", "relevant"}
+    assert body["relevant"] is True
     assert body["current"]["phase"] in {"EL_NINO", "LA_NINA", "NEUTRAL", "UNKNOWN"}
     assert len(body["series"]) > 200
     assert body["series"][0]["month"] == "2000-01-01"
 
     missing = ember_client.get("/api/enso", params={"aoi": "unknown-place-xyz"})
     assert missing.status_code == 404
+
+
+def test_alerts_regions_and_newsletter_subscribe(
+    ember_client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reg = ember_client.get("/api/alerts/regions", params={"country": "co"})
+    assert reg.status_code == 200
+    assert len(reg.json()) == 33
+
+    status = ember_client.get("/api/alerts/smtp-status")
+    assert status.status_code == 200
+    assert "configured" in status.json()
+
+    monkeypatch.setattr(
+        "brasa.alerts.newsletter._subscriptions_path",
+        lambda _dir: tmp_path / "subs.json",
+    )
+    sub = ember_client.post(
+        "/api/alerts/subscribe",
+        json={
+            "email": "alerts-test@example.org",
+            "name": "Test Team",
+            "aoi_id": "co",
+            "min_severity": "WATCH",
+            "lang": "es",
+            "send_immediate_report": True,
+        },
+    )
+    assert sub.status_code == 200
+    body = sub.json()
+    assert body["email"] == "alerts-test@example.org"
+    assert body["aoi_id"] == "co"
+    assert (tmp_path / "subs.json").exists()
+
+
+def test_enso_relevance_false_for_europe_and_true_for_tropics() -> None:
+    assert is_enso_relevant(country="Colombia", in_colombia=True) is True
+    assert is_enso_relevant(country="Peru", in_colombia=False) is True
+    assert is_enso_relevant(country="Spain", in_colombia=False) is False
+    assert is_enso_relevant(country="Germany", in_colombia=False) is False
+    assert is_enso_relevant(country="Japan", in_colombia=False) is False
+    assert is_enso_relevant(bbox=(129.0, 31.0, 146.0, 45.5), in_colombia=False) is False
 
 
 def test_analyst_spanish_reply_uses_spanish_number_formatting(ember_client: TestClient) -> None:

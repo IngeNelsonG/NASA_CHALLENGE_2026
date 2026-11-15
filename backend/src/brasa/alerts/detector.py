@@ -27,6 +27,119 @@ SEVERITY_LABELS: dict[AlertSeverity, tuple[str, str]] = {
 ENSO_THRESHOLD = 0.5
 ONI_LOOKBACK_MONTHS = 3
 MONTHS_IN_YEAR = 12
+LAT_TROPIC_BAND = 30.0
+LAT_MED_AFRICA_MIN = 20.0
+LON_EURO_AFRICA_MIN = -25.0
+LON_EURO_AFRICA_MAX = 65.0
+
+ENSO_AFFECTED_COUNTRIES: frozenset[str] = frozenset(
+    {
+        # South America
+        "Argentina",
+        "Bolivia",
+        "Brazil",
+        "Chile",
+        "Colombia",
+        "Ecuador",
+        "French Guiana",
+        "Guyana",
+        "Paraguay",
+        "Peru",
+        "Suriname",
+        "Uruguay",
+        "Venezuela",
+        # Central & North America + Caribbean (US southwest/southeast coast/tropics only)
+        "Bahamas",
+        "Belize",
+        "Costa Rica",
+        "Cuba",
+        "Dominican Republic",
+        "El Salvador",
+        "Guatemala",
+        "Haiti",
+        "Honduras",
+        "Jamaica",
+        "Mexico",
+        "Nicaragua",
+        "Panama",
+        "Puerto Rico",
+        "Trinidad and Tobago",
+        "United States",
+        # Southeast / South Asia & Oceania (excludes Japan, China, Korea, Russia)
+        "Australia",
+        "Bangladesh",
+        "Bhutan",
+        "Brunei",
+        "Cambodia",
+        "Fiji",
+        "India",
+        "Indonesia",
+        "Laos",
+        "Malaysia",
+        "Myanmar",
+        "Nepal",
+        "New Caledonia",
+        "New Zealand",
+        "Pakistan",
+        "Papua New Guinea",
+        "Philippines",
+        "Solomon Islands",
+        "Sri Lanka",
+        "Thailand",
+        "Timor-Leste",
+        "Vanuatu",
+        "Vietnam",
+        # Sub-Saharan / Southern / Eastern Africa
+        "Angola",
+        "Botswana",
+        "Burundi",
+        "Democratic Republic of the Congo",
+        "Eritrea",
+        "Eswatini",
+        "Ethiopia",
+        "Kenya",
+        "Lesotho",
+        "Madagascar",
+        "Malawi",
+        "Mozambique",
+        "Namibia",
+        "Republic of the Congo",
+        "Rwanda",
+        "Somalia",
+        "South Africa",
+        "South Sudan",
+        "Tanzania",
+        "Uganda",
+        "Zambia",
+        "Zimbabwe",
+    }
+)
+
+
+def is_enso_relevant(
+    *,
+    country: str | None = None,
+    in_colombia: bool = False,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> bool:
+    """Return True if the AOI lies inside the Pacific ENSO fire teleconnection regime."""
+    if in_colombia:
+        return True
+    if country:
+        if country.strip().lower() == "world":
+            return True
+        return country in ENSO_AFFECTED_COUNTRIES
+    if bbox is not None:
+        lon_mid = (bbox[0] + bbox[2]) / 2.0
+        lat_mid = (bbox[1] + bbox[3]) / 2.0
+        if abs(lat_mid) > LAT_TROPIC_BAND:
+            return False
+        if (
+            lat_mid >= LAT_MED_AFRICA_MIN
+            and LON_EURO_AFRICA_MIN <= lon_mid <= LON_EURO_AFRICA_MAX
+        ):
+            return False
+    return True
 MIN_PERSISTENCE_MONTHS = 2
 MIN_PERSISTENCE_COUNT = 3.0
 TREND_ACCEL_DZ = 0.4
@@ -97,6 +210,8 @@ def _empty_alert_item(
     country: str | None,
     in_colombia: bool,
     as_of: date | None,
+    enso_rel: bool = True,
+    bbox: tuple[float, float, float, float] | None = None,
 ) -> AlertItem:
     authorities = get_authorities_for_aoi(
         department=department,
@@ -110,6 +225,7 @@ def _empty_alert_item(
         region_name=region_name,
         department=department,
         country=country,
+        bbox=bbox,
         severity="NORMAL",
         severity_rank=0,
         severity_label_es=SEVERITY_LABELS["NORMAL"][0],
@@ -128,6 +244,7 @@ def _empty_alert_item(
         unseasonal=False,
         oni_value=None,
         enso_phase="UNKNOWN",
+        enso_relevant=enso_rel,
         headline_es=f"{region_name}: sin detecciones históricas registradas en el periodo.",
         headline_en=f"{region_name}: no historical fire detections recorded in period.",
         technical_summary_es=(
@@ -393,8 +510,10 @@ def evaluate_rows(
     as_of: date | None = None,
     nrt_detections: int | None = None,
     nrt_percent_of_normal: float | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
 ) -> AlertItem:
     """Compute a 100% deterministic unusual-trend alert from harmonized monthly rows."""
+    enso_rel = is_enso_relevant(country=country, in_colombia=in_colombia, bbox=bbox)
     if not rows:
         return _empty_alert_item(
             aoi_id=aoi_id,
@@ -403,6 +522,8 @@ def evaluate_rows(
             country=country,
             in_colombia=in_colombia,
             as_of=as_of,
+            enso_rel=enso_rel,
+            bbox=bbox,
         )
 
     ordered = sorted(rows, key=lambda r: pd.Timestamp(r["month"]))
@@ -444,8 +565,8 @@ def evaluate_rows(
         and z >= UNSEASONAL_Z_MIN
         and latest_h > max(q75, UNSEASONAL_COUNT_FLOOR)
     )
-    oni_val = _resolve_oni(ordered, latest_ts)
-    enso = _enso_phase(oni_val)
+    oni_val = _resolve_oni(ordered, latest_ts) if enso_rel else None
+    enso = _enso_phase(oni_val) if enso_rel else "NEUTRAL"
 
     severity = _classify_severity(
         latest_h=latest_h,
@@ -490,6 +611,7 @@ def evaluate_rows(
         region_name=region_name,
         department=department,
         country=country,
+        bbox=bbox,
         severity=severity,
         severity_rank=SEVERITY_RANK[severity],
         severity_label_es=sev_es,
@@ -508,6 +630,7 @@ def evaluate_rows(
         unseasonal=unseasonal,
         oni_value=oni_val,
         enso_phase=enso,
+        enso_relevant=enso_rel,
         nrt_detections=nrt_detections,
         nrt_percent_of_normal=nrt_percent_of_normal,
         headline_es=h_es,
