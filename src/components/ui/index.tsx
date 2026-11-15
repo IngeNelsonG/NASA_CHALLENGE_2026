@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { reducedMotion } from '@/lib/capabilities';
 import { SENSOR_COLOR } from '@/lib/colors';
 import type { Sensor } from '@/lib/types';
@@ -35,19 +35,20 @@ export function Reveal({ children, delay = 0, className = '' }: { children: Reac
   );
 }
 
-/** Heading text whose words rise out of a mask, one after another. Screen readers get the plain text. */
+/** Heading text whose words rise out of a mask, one after another. */
 export function SplitWords({ text, step = 55 }: { text: string; step?: number }) {
   const [ref, inView] = useInView<HTMLSpanElement>(0.4);
+  const words = text.split(' ');
   return (
     <span ref={ref} className={`split ${inView ? 'is-in' : ''}`}>
-      <span className="sr-only">{text}</span>
-      <span aria-hidden>
-        {text.split(' ').map((w, i) => (
-          <span key={i} className="split-w mr-[0.24em] last:mr-0">
+      {words.map((w, i) => (
+        <Fragment key={i}>
+          <span className="split-w">
             <span style={{ transitionDelay: `${i * step}ms` }}>{w}</span>
           </span>
-        ))}
-      </span>
+          {i < words.length - 1 ? ' ' : null}
+        </Fragment>
+      ))}
     </span>
   );
 }
@@ -85,7 +86,7 @@ export function Segmented<T extends string>({
   size?: 'sm' | 'md';
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border border-line bg-space-900/70 p-0.5">
+    <div role="radiogroup" aria-label={label} className="inline-flex max-w-full flex-wrap rounded-lg border border-line bg-graphite-900/70 p-0.5">
       {options.map((o) => {
         const on = o.value === value;
         return (
@@ -96,8 +97,8 @@ export function Segmented<T extends string>({
             aria-checked={on}
             title={o.title}
             onClick={() => onChange(o.value)}
-            className={`rounded-md font-semibold transition-colors duration-300 ${size === 'sm' ? 'min-h-[30px] px-2 text-xs' : 'min-h-[36px] px-3 text-sm'} ${
-              on ? 'bg-cream text-coal' : 'text-ink-dim hover:bg-space-700 hover:text-ink'
+            className={`rounded-md font-semibold transition-colors duration-300 ${size === 'sm' ? 'min-h-8 px-2 text-xs' : 'min-h-10 px-3 text-sm'} ${
+              on ? 'bg-cream text-coal' : 'text-ink-dim hover:bg-graphite-700 hover:text-ink'
             }`}
           >
             {o.label}
@@ -120,10 +121,7 @@ export function SectionHeading({ id, eyebrow, title, lead }: { id?: string; eyeb
   return (
     <header className="mx-auto mb-10 max-w-4xl text-center lg:mb-14">
       <Reveal>
-        <p className="eyebrow flex items-center justify-center gap-3">
-          <Sparkle className="h-3 w-3 text-ember" />
-          {eyebrow}
-        </p>
+        <p className="eyebrow">{eyebrow}</p>
       </Reveal>
       <h2 id={id} className="mt-5 text-[2.4rem] leading-[1.05] sm:text-5xl lg:text-6xl">
         <SplitWords text={title} />
@@ -139,11 +137,11 @@ export function SectionHeading({ id, eyebrow, title, lead }: { id?: string; eyeb
 
 export function Toggle({ checked, onChange, children }: { checked: boolean; onChange: () => void; children: ReactNode }) {
   return (
-    <label className="flex min-h-[32px] cursor-pointer items-center gap-2.5 text-sm text-ink">
+    <label className="tap flex min-h-8 cursor-pointer items-center gap-2.5 text-sm text-ink">
       <input type="checkbox" checked={checked} onChange={onChange} className="peer sr-only" />
       <span
         aria-hidden
-        className="relative h-[18px] w-8 shrink-0 rounded-full border border-line bg-space-900 transition-colors duration-300 after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-ink-mute after:transition-transform after:duration-300 peer-checked:border-ember peer-checked:bg-ember peer-checked:after:translate-x-3.5 peer-checked:after:bg-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-yellow"
+        className="relative h-[18px] w-8 shrink-0 rounded-full border border-line bg-graphite-900 transition-colors duration-300 after:absolute after:left-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-ink-mute after:transition-transform after:duration-300 peer-checked:border-accent peer-checked:bg-accent peer-checked:after:translate-x-3.5 peer-checked:after:bg-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-cream"
       />
       <span className="flex items-center gap-1.5">{children}</span>
     </label>
@@ -153,7 +151,7 @@ export function Toggle({ checked, onChange, children }: { checked: boolean; onCh
 export function Spinner({ label }: { label: string }) {
   return (
     <span role="status" className="inline-flex items-center gap-2 text-xs text-ink-dim">
-      <span aria-hidden className="h-3 w-3 animate-spin rounded-full border-2 border-ember border-t-transparent" />
+      <span aria-hidden className="h-3 w-3 animate-spin rounded-full border-2 border-accent border-t-transparent" />
       {label}
     </span>
   );

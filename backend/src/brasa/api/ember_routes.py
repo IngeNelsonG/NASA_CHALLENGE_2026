@@ -11,10 +11,12 @@ from __future__ import annotations
 import json
 import logging
 import math
+import threading
 import time
 import unicodedata
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -26,16 +28,19 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from brasa.alerts.detector import evaluate_rows
+from brasa.alerts.detector import ENSO_THRESHOLD, _enso_phase, _fmt_es, evaluate_rows
 from brasa.alerts.schemas import AlertItem
+from brasa.api.assistant import Assistant, read_reply, system_prompt
 from brasa.api.hotspot_sources import (
     FIRMS_MAX_SPAN_DAYS,
     ORINOQUIA,
     FirmsHotspots,
-    hotspot_source,
+    areas_source,
     merge_geometries,
+    parse_areas,
 )
 from brasa.api.service import (
+    ONI_FILE,
     PROCESSED_DETECTIONS,
     CalendarService,
     CountryCalendars,
@@ -47,6 +52,7 @@ from brasa.domain.models import COLOMBIA, BoundingBox, InvalidBoundingBoxError
 from brasa.harmonization import aggregate_monthly, fit_sensor_ratio
 from brasa.harmonization.calibrate import InsufficientOverlapError, SensorRatio
 from brasa.ingestion.boundaries import geometry_bbox
+from brasa.ingestion.oni import OniTable, load_oni
 from brasa.ingestion.recent import RecentSource
 
 logger = logging.getLogger(__name__)
@@ -55,6 +61,10 @@ Resolution = Literal["day", "week", "month"]
 MODIS_START = date(2000, 11, 1)
 VIIRS_FIRST_LIGHT = date(2012, 1, 20)
 HOTSPOT_POINT_CAP = 25_000
+# Calendars built at startup: the landing page's default area and Colombia (client RECORD_START).
+WARM_AOIS = ("co-orinoquia", "co")
+RECORD_START = "2000-01-01"
+MIN_RING_POINTS = 3
 MIN_STAT_SAMPLES = 2
 DECEMBER = 12
 DAYS_IN_LEAP_YEAR = 366
@@ -65,6 +75,13 @@ ANOM_NEG_MIN_Z = -1.8
 ANOM_NEG_MIN_COUNT = 20.0
 SOLAR_DAWN_HOUR = 6.0
 SOLAR_DUSK_HOUR = 18.0
+ENSO_SERIES_START = date(2000, 1, 1)
+ENSO_MODERATE_ONI = 1.0
+ENSO_STRONG_ONI = 1.5
+ENSO_VERY_STRONG_ONI = 2.0
+ENSO_EPISODE_MIN_MONTHS = 5
+ENSO_MAX_LAG_MONTHS = 6
+ENSO_MIN_CORR_SAMPLES = 24
 DETECTION_COLS = [
     "latitude",
     "longitude",
@@ -151,11 +168,18 @@ class AnalystContext(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
 class AnalystRequest(BaseModel):
     aoi_id: str = Field(alias="aoiId", max_length=120)
     question: str = Field(min_length=1, max_length=2000)
     lang: Literal["es", "en"] = "es"
     context: AnalystContext | None = None
+    # earlier turns of the chat, oldest first, so follow-up questions make sense
+    history: list[ChatTurn] = Field(default_factory=list, max_length=8)
 
     model_config = {"populate_by_name": True}
 
@@ -716,6 +740,7 @@ class _EmberContext:
     parquet_path: Path
     export_path: Path | None
     has_parquet: bool
+    oni_table: OniTable = field(default_factory=dict)
     firms: FirmsHotspots | None = None
     department_collection: dict[str, Any] | None = None
     world_collection: Mapping[str, list[dict[str, Any]]] | None = None
@@ -1149,13 +1174,16 @@ def _compose_analyst_reply(
         d = date.fromisoformat(iso_d)
         return f"{months_tbl[d.month - 1]} {d.year}"
 
+    def _z_es(val: float) -> str:
+        return f"{'+' if val >= 0 else ''}{_fmt_es(val, 2)}\u03c3"
+
     highlights: list[dict[str, str]] = [
         {
             "date": a["start"],
             "reason": (
-                f"Anomal\u00eda positiva verificada (z = {a['zScore']:+.2f}\u03c3)"
+                f"Anomal\u00eda positiva verificada (z = {_z_es(float(a['zScore']))})"
                 if lang == "es"
-                else f"Verified positive anomaly (z = {a['zScore']:+.2f}\u03c3)"
+                else f"Verified positive anomaly (z = {float(a['zScore']):+.2f}\u03c3)"
             ),
         }
         for a in top_anoms
@@ -1175,22 +1203,23 @@ def _compose_analyst_reply(
             ),
             (
                 f"\u2022 Calibraci\u00f3n MODIS\u2013VIIRS: raz\u00f3n emp\u00edrica k = "
-                f"{ratio.ratio:.2f}\u00d7 (RIC {ratio.q25:.2f}\u2013{ratio.q75:.2f} en "
-                f"{ratio.overlap_months} meses de traslape). VIIRS (375 m I4 a 3,74 \u00b5m) "
-                "detecta focos m\u00e1s peque\u00f1os que MODIS (1 km a 3,96 \u00b5m); "
-                "la mezcla por inversa de varianza evita saltos artificiales."
+                f"{_fmt_es(ratio.ratio, 2)}\u00d7 (RIC {_fmt_es(ratio.q25, 2)}\u2013"
+                f"{_fmt_es(ratio.q75, 2)} en {_fmt_es(ratio.overlap_months, 0)} meses de "
+                "traslape). VIIRS (375 m I4 a 3,74 \u00b5m) detecta focos m\u00e1s peque\u00f1os "
+                "que MODIS (1 km a 3,96 \u00b5m); la mezcla por inversa de varianza evita saltos "
+                "artificiales."
             ),
         ]
         if top_anoms:
             anom_txt = ", ".join(
-                f"{_ym(a['start'])} (z = {float(a['zScore']):+.2f}\u03c3)" for a in top_anoms
+                f"{_ym(a['start'])} (z = {_z_es(float(a['zScore']))})" for a in top_anoms
             )
-            yr_txt = ", ".join(f"{y} ({v:,.0f} MODIS-eq)" for y, v in top_years)
+            yr_txt = ", ".join(f"{y} ({_fmt_es(v, 0)} eq-MODIS)" for y, v in top_years)
             suffix = f" \u2014 a\u00f1os pico: {yr_txt}." if top_years else "."
             bullets.append(f"\u2022 Episodios extremos (log-estandarizado): {anom_txt}{suffix}")
         if mean_frp is not None:
             bullets.append(
-                f"\u2022 Potencia Radiativa (FRP): promedio de {mean_frp:.1f} MW en celdas "
+                f"\u2022 Potencia Radiativa (FRP): promedio de {_fmt_es(mean_frp, 1)} MW en celdas "
                 "activas (Stefan-Boltzmann / banda MIR ~4 \u00b5m)."
             )
         if is_enso_q:
@@ -1281,7 +1310,89 @@ def _rows_for_entry(
     return rows, ratio, entry.country == "Colombia"
 
 
+def _recent_stamp(ctx: _EmberContext) -> str | None:
+    latest = ctx.recent_src.get() if ctx.recent_src is not None else None
+    return latest.fetched_at.isoformat() if latest is not None else None
+
+
+def _in_bbox(lon: float, lat: float, bbox: tuple[float, float, float, float]) -> bool:
+    return bbox[0] <= lon <= bbox[2] and bbox[1] <= lat <= bbox[3]
+
+
+def _point_in_ring(lon: float, lat: float, ring: Sequence[Sequence[float]]) -> bool:
+    """Ray-casting point-in-ring test (even-odd rule)."""
+    if len(ring) < MIN_RING_POINTS:
+        return False
+    inside = False
+    j = len(ring) - 1
+    for i, pt in enumerate(ring):
+        xi, yi = pt[0], pt[1]
+        xj, yj = ring[j][0], ring[j][1]
+        if (yi > lat) != (yj > lat):
+            x_intersect = (xj - xi) * (lat - yi) / (yj - yi) + xi
+            if lon < x_intersect:
+                inside = not inside
+        j = i
+    return inside
+
+
+def _point_in_polygon_rings(
+    lon: float, lat: float, rings: Sequence[Sequence[Sequence[float]]]
+) -> bool:
+    if not rings or not _point_in_ring(lon, lat, rings[0]):
+        return False
+    return not any(_point_in_ring(lon, lat, hole) for hole in rings[1:])
+
+
+def _point_in_geometry(lon: float, lat: float, geom: Mapping[str, Any] | None) -> bool:
+    """Return True if (lon, lat) lies inside a GeoJSON Polygon or MultiPolygon."""
+    if not geom:
+        return False
+    gtype = geom.get("type")
+    coords = geom.get("coordinates")
+    if not coords:
+        return False
+    if gtype == "Polygon":
+        return _point_in_polygon_rings(lon, lat, coords)
+    if gtype == "MultiPolygon":
+        return any(_point_in_polygon_rings(lon, lat, poly) for poly in coords)
+    return False
+
+
+def _feature_geoms(
+    features: Sequence[Mapping[str, Any]],
+) -> list[tuple[tuple[float, float, float, float], Mapping[str, Any]]]:
+    out: list[tuple[tuple[float, float, float, float], Mapping[str, Any]]] = []
+    for feat in features:
+        geom = feat.get("geometry")
+        if geom:
+            out.append((_parse_bbox_str(geometry_bbox(geom)), geom))
+    return out
+
+
+def _build_aoi_lookup(
+    ctx: _EmberContext,
+) -> tuple[
+    list[tuple[tuple[float, float, float, float], Mapping[str, Any]]],
+    list[tuple[AoiEntry, list[tuple[tuple[float, float, float, float], Mapping[str, Any]]]]],
+]:
+    dept_geoms = _feature_geoms((ctx.department_collection or {}).get("features", []))
+    world = ctx.world_collection or {}
+    countries: list[
+        tuple[AoiEntry, list[tuple[tuple[float, float, float, float], Mapping[str, Any]]]]
+    ] = []
+    for entry in ctx.aoi_ordered:
+        if entry.kind == "country" and entry.country:
+            geoms = _feature_geoms(world.get(entry.country, ()))
+            if geoms:
+                countries.append((entry, geoms))
+    return dept_geoms, countries
+
+
 def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> None:
+    dept_geoms, country_geoms = _build_aoi_lookup(ctx)
+    co_entry = ctx.aoi_by_id.get("co")
+
     @app.get("/api/aoi/search")
     def api_aoi_search(q: str = Query(default="", max_length=120)) -> list[dict[str, Any]]:
         query = _norm_text(q)
@@ -1299,6 +1410,28 @@ def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, buil
             hits = (starts + contains)[:12]
         return [{"id": e.id, "name": e.name, "bbox": list(e.bbox)} for e in hits]
 
+    @app.get("/api/aoi/at")
+    def api_aoi_at(
+        lat: float = Query(..., ge=-90.0, le=90.0),
+        lon: float = Query(..., ge=-180.0, le=180.0),
+    ) -> dict[str, Any]:
+        if (
+            co_entry is not None
+            and _in_bbox(lon, lat, co_entry.bbox)
+            and any(
+                _in_bbox(lon, lat, bb) and _point_in_geometry(lon, lat, g) for bb, g in dept_geoms
+            )
+        ):
+            return {"id": co_entry.id, "name": co_entry.name, "bbox": list(co_entry.bbox)}
+        # Countries crossing the antimeridian (USA, Russia, Fiji...) are stored unwrapped in 0..360.
+        for x in (lon, lon + 360.0):
+            for entry, geoms in country_geoms:
+                if _in_bbox(x, lat, entry.bbox) and any(
+                    _in_bbox(x, lat, bb) and _point_in_geometry(x, lat, g) for bb, g in geoms
+                ):
+                    return {"id": entry.id, "name": entry.name, "bbox": list(entry.bbox)}
+        raise HTTPException(status_code=404, detail="No country at this point")
+
     @app.get("/api/calendar")
     def api_calendar(
         aoi: str = Query(max_length=120),
@@ -1306,7 +1439,7 @@ def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, buil
         to_date: str = Query(default=date.today().isoformat(), alias="to", max_length=10),
         resolution: Resolution = "day",
     ) -> dict[str, Any]:
-        return dict(build_cal(aoi, from_date, to_date, resolution))
+        return dict(build_cal(aoi, from_date, to_date, resolution, _recent_stamp(ctx)))
 
     @app.get("/api/hotspots")
     def api_hotspots(
@@ -1317,7 +1450,7 @@ def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, buil
         sensor: Literal["modis", "viirs", "all"] = "all",
     ) -> list[dict[str, Any]]:
         try:
-            area = BoundingBox.parse(bbox)
+            areas = parse_areas(bbox)
         except InvalidBoundingBoxError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         if from_str and to_str:
@@ -1335,20 +1468,43 @@ def _register_calendar_and_hotspot_routes(app: FastAPI, ctx: _EmberContext, buil
             ) from exc
         if start_d > end_d:
             raise HTTPException(status_code=422, detail="`from` must not be after `to`.")
-        source = hotspot_source(area, start_d, end_d, firms_available=ctx.firms is not None)
-        if source == "firms" and ctx.firms is not None:
-            rows_df = ctx.firms.fetch(area, start_d, end_d)
-            if sensor in {"modis", "viirs"} and not rows_df.empty:
-                rows_df = rows_df[rows_df["sensor"] == sensor.upper()]
-        else:
-            rows_df = _query_hotspots_df(
+        source = areas_source(areas, start_d, end_d, firms_available=ctx.firms is not None)
+        if source == "too_long":
+            # Points outside Colombia come live from FIRMS for short spans only; answering with
+            # the few archive points that fall inside Colombia's box would draw a misleading map.
+            return []
+        firms = ctx.firms if source == "firms" else None
+
+        def rows_for(area: BoundingBox) -> pd.DataFrame:
+            if firms is not None:
+                rows_df = firms.fetch(area, start_d, end_d)
+                if sensor in {"modis", "viirs"} and not rows_df.empty:
+                    rows_df = rows_df[rows_df["sensor"] == sensor.upper()]
+                return rows_df
+            return _query_hotspots_df(
                 ctx,
                 area,
                 start_ts=pd.Timestamp(start_d),
                 end_ts_excl=pd.Timestamp(end_d) + pd.Timedelta(days=1),
                 sensor=sensor,
             )
-        return _serialize_hotspots(rows_df)
+
+        # the two halves of an area across the antimeridian download at the same time
+        with ThreadPoolExecutor(max_workers=len(areas)) as pool:
+            frames = list(pool.map(rows_for, areas))
+        rows = [f for f in frames if not f.empty]
+        return _serialize_hotspots(pd.concat(rows, ignore_index=True) if rows else frames[0])
+
+
+def _parse_span(bbox: str, from_str: str, to_str: str) -> tuple[list[BoundingBox], date, date]:
+    try:
+        areas = parse_areas(bbox)
+        start_d, end_d = date.fromisoformat(from_str), date.fromisoformat(to_str)
+    except (InvalidBoundingBoxError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid bbox or dates.") from exc
+    if start_d > end_d:
+        raise HTTPException(status_code=422, detail="`from` must not be after `to`.")
+    return areas, start_d, end_d
 
 
 def _register_area_routes(app: FastAPI, ctx: _EmberContext) -> None:
@@ -1359,16 +1515,27 @@ def _register_area_routes(app: FastAPI, ctx: _EmberContext) -> None:
         to_str: str = Query(alias="to", max_length=10),
     ) -> dict[str, Any]:
         """Where the points for this area and span come from, so the UI can explain gaps."""
-        try:
-            area = BoundingBox.parse(bbox)
-            start_d, end_d = date.fromisoformat(from_str), date.fromisoformat(to_str)
-        except (InvalidBoundingBoxError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail="Invalid bbox or dates.") from exc
+        areas, start_d, end_d = _parse_span(bbox, from_str, to_str)
         return {
-            "source": hotspot_source(area, start_d, end_d, firms_available=ctx.firms is not None),
+            "source": areas_source(areas, start_d, end_d, firms_available=ctx.firms is not None),
             "firmsConfigured": ctx.firms is not None,
             "maxDays": FIRMS_MAX_SPAN_DAYS,
         }
+
+    @app.post("/api/hotspots/warm")
+    def api_hotspots_warm(
+        bbox: str = Query(max_length=120),
+        from_str: str = Query(alias="from", max_length=10),
+        to_str: str = Query(alias="to", max_length=10),
+    ) -> dict[str, bool]:
+        """Pre-download a span from FIRMS in the background (the next timeline step), so it is
+        already cached when the user gets there. Archive areas need no warm-up."""
+        areas, start_d, end_d = _parse_span(bbox, from_str, to_str)
+        firms = ctx.firms
+        if firms is None or areas_source(areas, start_d, end_d, firms_available=True) != "firms":
+            return {"queued": False}
+        queued = [firms.warm(area, start_d, end_d) for area in areas]
+        return {"queued": any(queued)}
 
     @app.get("/api/aoi/geometry")
     def api_aoi_geometry(aoi: str = Query(max_length=120)) -> dict[str, Any]:
@@ -1473,7 +1640,191 @@ def _build_alerts_overview(
     return AlertsOverviewResponse(countries=country_items, colombia=colombia_items)
 
 
-def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> None:
+def _enso_strength(
+    oni: float | None,
+) -> Literal["weak", "moderate", "strong", "very_strong"] | None:
+    if oni is None:
+        return None
+    mag = abs(oni)
+    if mag < ENSO_THRESHOLD:
+        return None
+    if mag < ENSO_MODERATE_ONI:
+        return "weak"
+    if mag < ENSO_STRONG_ONI:
+        return "moderate"
+    if mag < ENSO_VERY_STRONG_ONI:
+        return "strong"
+    return "very_strong"
+
+
+def _pearson_r(xs: list[float], ys: list[float]) -> float | None:
+    if len(xs) < ENSO_MIN_CORR_SAMPLES:
+        return None
+    arr_x = np.asarray(xs, dtype=float)
+    arr_y = np.asarray(ys, dtype=float)
+    if float(arr_x.std()) == 0.0 or float(arr_y.std()) == 0.0:
+        return None
+    corr = float(np.corrcoef(arr_x, arr_y)[0, 1])
+    return None if math.isnan(corr) else corr
+
+
+def _select_enso_lag(series: Sequence[Mapping[str, Any]]) -> tuple[int, float | None, int]:
+    best_lag = 0
+    best_r: float | None = None
+    best_n = 0
+    lag0_n = 0
+    for lag in range(ENSO_MAX_LAG_MONTHS + 1):
+        xs: list[float] = []
+        ys: list[float] = []
+        for idx in range(len(series) - lag):
+            oni_v = series[idx]["oni"]
+            z_v = series[idx + lag]["z"]
+            if oni_v is not None and z_v is not None:
+                xs.append(float(oni_v))
+                ys.append(float(z_v))
+        if lag == 0:
+            lag0_n = len(xs)
+        corr = _pearson_r(xs, ys)
+        if corr is not None and (best_r is None or abs(corr) > abs(best_r)):
+            best_lag = lag
+            best_r = corr
+            best_n = len(xs)
+    if best_r is None:
+        return 0, None, lag0_n
+    return best_lag, round(best_r, 3), best_n
+
+
+def _compute_phase_means(
+    series: Sequence[Mapping[str, Any]], lag_months: int
+) -> dict[str, dict[str, Any]]:
+    buckets: dict[str, list[float]] = {"EL_NINO": [], "LA_NINA": [], "NEUTRAL": []}
+    for idx in range(len(series) - lag_months):
+        oni_v = series[idx]["oni"]
+        z_v = series[idx + lag_months]["z"]
+        if oni_v is None or z_v is None:
+            continue
+        phase = _enso_phase(float(oni_v))
+        if phase in buckets:
+            buckets[phase].append(float(z_v))
+    return {
+        phase: {
+            "months": len(vals),
+            "mean_z": round(sum(vals) / len(vals), 2) if vals else None,
+        }
+        for phase, vals in buckets.items()
+    }
+
+
+def _detect_enso_episodes(
+    series: Sequence[Mapping[str, Any]], lag_months: int
+) -> list[dict[str, Any]]:
+    episodes: list[dict[str, Any]] = []
+    run: list[int] = []
+    run_phase: str | None = None
+
+    def _flush() -> None:
+        nonlocal run, run_phase
+        if run_phase in {"EL_NINO", "LA_NINA"} and len(run) >= ENSO_EPISODE_MIN_MONTHS:
+            start_i, end_i = run[0], run[-1]
+            peak_oni = max((float(series[j]["oni"]) for j in run), key=abs)
+            ext_end = min(len(series) - 1, end_i + lag_months)
+            z_vals = [
+                float(series[j]["z"])
+                for j in range(start_i, ext_end + 1)
+                if series[j]["z"] is not None
+            ]
+            episodes.append(
+                {
+                    "phase": run_phase,
+                    "start": series[start_i]["month"],
+                    "end": series[end_i]["month"],
+                    "peak_oni": round(peak_oni, 2),
+                    "fire_z": round(sum(z_vals) / len(z_vals), 2) if z_vals else None,
+                }
+            )
+        run = []
+        run_phase = None
+
+    for idx, item in enumerate(series):
+        oni_v = item["oni"]
+        phase = _enso_phase(float(oni_v)) if oni_v is not None else "UNKNOWN"
+        if phase in {"EL_NINO", "LA_NINA"}:
+            if phase == run_phase:
+                run.append(idx)
+            else:
+                _flush()
+                run = [idx]
+                run_phase = phase
+        else:
+            _flush()
+    _flush()
+    return episodes
+
+
+def _compute_enso_payload(
+    oni_table: OniTable, cells: Sequence[Mapping[str, Any]]
+) -> dict[str, Any]:
+    if not oni_table:
+        return {
+            "current": {"month": None, "oni": None, "phase": "UNKNOWN", "strength": None},
+            "series": [],
+            "episodes": [],
+            "impact": {
+                "lag_months": 0,
+                "r": None,
+                "n": 0,
+                "phases": {
+                    "EL_NINO": {"months": 0, "mean_z": None},
+                    "LA_NINA": {"months": 0, "mean_z": None},
+                    "NEUTRAL": {"months": 0, "mean_z": None},
+                },
+            },
+        }
+    z_by_month = {str(c["date"]): c.get("anomalyZ") for c in cells}
+    latest_yr, latest_mo = max(oni_table.keys())
+    end_month = date(latest_yr, latest_mo, 1)
+
+    series: list[dict[str, Any]] = []
+    cur = ENSO_SERIES_START
+    while cur <= end_month:
+        iso = cur.isoformat()
+        oni_val = oni_table.get((cur.year, cur.month))
+        z_raw = z_by_month.get(iso)
+        series.append(
+            {
+                "month": iso,
+                "oni": round(float(oni_val), 2) if oni_val is not None else None,
+                "z": round(float(z_raw), 2) if z_raw is not None else None,
+            }
+        )
+        cur = _next_month_start(cur)
+
+    lag_months, r_val, n_samples = _select_enso_lag(series)
+    phases = _compute_phase_means(series, lag_months)
+    episodes = _detect_enso_episodes(series, lag_months)
+    latest_entry = series[-1]
+    cur_oni = latest_entry["oni"]
+    return {
+        "current": {
+            "month": latest_entry["month"],
+            "oni": cur_oni,
+            "phase": _enso_phase(cur_oni),
+            "strength": _enso_strength(cur_oni),
+        },
+        "series": series,
+        "episodes": episodes,
+        "impact": {
+            "lag_months": lag_months,
+            "r": r_val,
+            "n": n_samples,
+            "phases": phases,
+        },
+    }
+
+
+def _register_intel_routes(
+    app: FastAPI, ctx: _EmberContext, build_cal: Any, assistant: Assistant | None = None
+) -> None:
     @lru_cache(maxsize=4)
     def _cached_overview(
         as_of_key: date | None, recent_stamp: str | None
@@ -1481,18 +1832,38 @@ def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> 
         _ = recent_stamp
         return _build_alerts_overview(ctx, as_of=as_of_key)
 
+    @lru_cache(maxsize=128)
+    def _cached_alert(entry_id: str, as_of_key: date | None, recent_stamp: str | None) -> AlertItem:
+        _ = recent_stamp
+        entry = _resolve_aoi_id(entry_id, ctx.aoi_by_id)
+        if entry is None:  # pragma: no cover - validated before cache lookup
+            raise HTTPException(status_code=404, detail=f"Unknown AOI: {entry_id}")
+        latest = ctx.recent_src.get() if ctx.recent_src is not None else None
+        return _evaluate_entry_alert(ctx, entry, as_of=as_of_key, latest_recent=latest)
+
+    @lru_cache(maxsize=64)
+    def _cached_enso(entry_id: str, recent_stamp: str | None) -> dict[str, Any]:
+        _ = recent_stamp
+        cal = build_cal(entry_id, "2000-01-01", date.today().isoformat(), "month", recent_stamp)
+        return _compute_enso_payload(ctx.oni_table, cal["cells"])
+
     @app.get("/api/anomalies")
     def api_anomalies(aoi: str = Query(max_length=120)) -> list[dict[str, Any]]:
-        cal = build_cal(aoi, "2000-01-01", date.today().isoformat(), "month")
+        cal = build_cal(aoi, "2000-01-01", date.today().isoformat(), "month", _recent_stamp(ctx))
         return _detect_anomalies_from_cells(cal["cells"])
+
+    @app.get("/api/enso")
+    def api_enso(aoi: str = Query(max_length=120)) -> dict[str, Any]:
+        entry = _resolve_aoi_id(aoi, ctx.aoi_by_id)
+        if entry is None:
+            raise HTTPException(status_code=404, detail=f"Unknown AOI: {aoi}")
+        return _cached_enso(entry.id, _recent_stamp(ctx))
 
     @app.get("/api/alerts/overview", response_model=AlertsOverviewResponse)
     def api_alerts_overview(
         as_of: Annotated[date | None, Query()] = None,
     ) -> AlertsOverviewResponse:
-        latest = ctx.recent_src.get() if ctx.recent_src is not None else None
-        stamp = latest.fetched_at.isoformat() if latest is not None else None
-        return _cached_overview(as_of, stamp)
+        return _cached_overview(as_of, _recent_stamp(ctx))
 
     @app.get("/api/alerts", response_model=AlertItem)
     def api_alerts(
@@ -1502,8 +1873,7 @@ def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> 
         entry = _resolve_aoi_id(aoi, ctx.aoi_by_id)
         if entry is None:
             raise HTTPException(status_code=404, detail=f"Unknown AOI: {aoi}")
-        latest = ctx.recent_src.get() if ctx.recent_src is not None else None
-        return _evaluate_entry_alert(ctx, entry, as_of=as_of, latest_recent=latest)
+        return _cached_alert(entry.id, as_of, _recent_stamp(ctx))
 
     @app.get("/api/satellites/tle")
     def api_satellites_tle() -> list[dict[str, Any]]:
@@ -1514,7 +1884,9 @@ def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> 
         entry = _resolve_aoi_id(req.aoi_id, ctx.aoi_by_id)
         if entry is None:
             raise HTTPException(status_code=404, detail=f"Unknown AOI: {req.aoi_id}")
-        cal = build_cal(entry.id, "2000-01-01", date.today().isoformat(), "month")
+        cal = build_cal(
+            entry.id, "2000-01-01", date.today().isoformat(), "month", _recent_stamp(ctx)
+        )
         rows, ratio, in_col = _rows_for_entry(ctx, entry)
         alert = evaluate_rows(
             rows,
@@ -1534,6 +1906,14 @@ def _register_intel_routes(app: FastAPI, ctx: _EmberContext, build_cal: Any) -> 
             question=req.question,
             lang=req.lang,
         )
+        if assistant is not None:
+            messages = [turn.model_dump() for turn in req.history]
+            messages.append({"role": "user", "content": req.question})
+            raw = assistant(system_prompt(entry.name, text, req.lang), messages)
+            reply, months = read_reply(raw or "", req.lang)
+            if reply:  # otherwise keep the deterministic reply
+                text = reply
+                highlights = highlights if months else []
 
         def _stream() -> Iterator[str]:
             words = text.split(" ")
@@ -1558,11 +1938,20 @@ def register_ember_routes(
     recent_src: RecentSource | None,
     data_dir: Path,
     firms: FirmsHotspots | None = None,
-) -> None:
-    """Register unified /api/* endpoints backed by real NASA FIRMS archives."""
+    warm_up: bool = False,
+    assistant: Assistant | None = None,
+) -> Mapping[str, AoiEntry]:
+    """Register unified /api/* endpoints backed by real NASA FIRMS archives; returns the area
+    index so other routes can take the same area ids."""
     aoi_by_id, aoi_ordered = _build_aoi_index(department_collection, world_collection, countries)
     export_path = getattr(service, "export_path", None)
     parquet_path = export_path or (data_dir / PROCESSED_DETECTIONS)
+    oni_table: OniTable = {
+        **(getattr(countries, "oni", None) or {}),
+        **(getattr(service, "oni", None) or {}),
+    }
+    if not oni_table:
+        oni_table = load_oni(data_dir / ONI_FILE)
     ctx = _EmberContext(
         service=service,
         countries=countries,
@@ -1572,6 +1961,7 @@ def register_ember_routes(
         parquet_path=parquet_path,
         export_path=export_path,
         has_parquet=parquet_path.exists(),
+        oni_table=oni_table,
         firms=firms,
         department_collection=department_collection,
         world_collection=world_collection,
@@ -1588,8 +1978,13 @@ def register_ember_routes(
 
     @lru_cache(maxsize=64)
     def _build_calendar_payload(
-        aoi_id: str, from_str: str, to_str: str, resolution: Resolution
+        aoi_id: str,
+        from_str: str,
+        to_str: str,
+        resolution: Resolution,
+        recent_stamp: str | None = None,
     ) -> dict[str, Any]:
+        _ = recent_stamp
         entry = _resolve_aoi_id(aoi_id, ctx.aoi_by_id)
         if entry is None:
             raise HTTPException(status_code=404, detail=f"Unknown AOI: {aoi_id}")
@@ -1645,4 +2040,20 @@ def register_ember_routes(
     _register_calendar_and_hotspot_routes(app, ctx, _build_calendar_payload)
 
     _register_area_routes(app, ctx)
-    _register_intel_routes(app, ctx, _build_calendar_payload)
+    _register_intel_routes(app, ctx, _build_calendar_payload, assistant)
+
+    if warm_up:
+        # Pre-build the calendars the landing page asks for first, so the first visitor
+        # does not pay for them. Same arguments as the client sends, so the lru_cache hits.
+        def _warm() -> None:
+            today = date.today().isoformat()
+            for aoi_id in WARM_AOIS:
+                for res in ("month", "day"):
+                    try:
+                        stamp = _recent_stamp(ctx)
+                        _build_calendar_payload(aoi_id, RECORD_START, today, res, stamp)
+                    except Exception:  # pragma: no cover - warm-up is best effort
+                        logger.warning("Calendar warm-up failed for %s", aoi_id)
+
+        threading.Thread(target=_warm, name="calendar-warm", daemon=True).start()
+    return aoi_by_id

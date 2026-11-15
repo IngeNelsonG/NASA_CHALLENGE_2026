@@ -8,6 +8,7 @@ deterministic template, so the endpoint never depends on an external service.
 import json
 import logging
 import re
+import time
 from collections.abc import Callable, Sequence
 from datetime import date
 from typing import Any
@@ -23,6 +24,7 @@ ENSO_THRESHOLD = 0.5
 MAX_TOKENS = 2000
 MAX_TOKENS_OPENAI = 600
 TIMEOUT_SECONDS = 30.0
+MAX_RETRY_WAIT_SECONDS = 10.0
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 THINK_TAGS = re.compile(r"<think>.*?</think>", re.DOTALL)
 
@@ -305,35 +307,70 @@ def claude_summary(
     return text, response.model
 
 
-def openai_compatible_summary(
-    http: httpx.Client, base_url: str, model: str, facts: ExplainFacts, lang: Lang
-) -> tuple[str, str] | None:
-    """Phrase `facts` with any OpenAI-compatible chat API (Groq, xAI...); None on any failure."""
+def _retry_after(response: httpx.Response) -> float | None:
+    """Seconds to wait before retrying a 429, when the provider names a short enough wait."""
+    if response.status_code != 429:  # noqa: PLR2004 - HTTP Too Many Requests
+        return None
     try:
-        response = http.post(
-            f"{base_url.rstrip('/')}/chat/completions",
-            json={
-                "model": model,
-                "max_tokens": MAX_TOKENS_OPENAI,
-                "temperature": 0.0,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": _user_message(facts, lang)},
-                ],
-            },
-        )
+        wait = float(response.headers.get("retry-after", ""))
+    except ValueError:
+        return None
+    return wait if 0 <= wait <= MAX_RETRY_WAIT_SECONDS else None
+
+
+def chat_completion(
+    http: httpx.Client,
+    base_url: str,
+    model: str,
+    messages: list[dict[str, str]],
+    *,
+    max_tokens: int,
+    temperature: float = 0.0,
+) -> str | None:
+    """One reply from any OpenAI-compatible chat API (Groq, xAI...); None on any failure.
+
+    A rate limit that names a short wait (Retry-After) is waited out and retried once."""
+    body = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": messages,
+    }
+    try:
+        response = http.post(f"{base_url.rstrip('/')}/chat/completions", json=body)
+        wait = _retry_after(response)
+        if wait is not None:
+            time.sleep(wait)
+            response = http.post(f"{base_url.rstrip('/')}/chat/completions", json=body)
         response.raise_for_status()
         choice = response.json()["choices"][0]
         text = THINK_TAGS.sub("", choice["message"]["content"] or "").strip()
     except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as error:
         # Class name only: never log headers (they carry the API key).
         status = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
-        logger.warning("AI summary failed: %s (status %s)", type(error).__name__, status)
+        logger.warning("AI reply failed: %s (status %s)", type(error).__name__, status)
         return None
     if not text or choice.get("finish_reason") == "length":
-        logger.warning("AI summary unusable (finish_reason=%s)", choice.get("finish_reason"))
+        logger.warning("AI reply unusable (finish_reason=%s)", choice.get("finish_reason"))
         return None
-    return text, model
+    return text
+
+
+def openai_compatible_summary(
+    http: httpx.Client, base_url: str, model: str, facts: ExplainFacts, lang: Lang
+) -> tuple[str, str] | None:
+    """Phrase `facts` with any OpenAI-compatible chat API (Groq, xAI...); None on any failure."""
+    text = chat_completion(
+        http,
+        base_url,
+        model,
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": _user_message(facts, lang)},
+        ],
+        max_tokens=MAX_TOKENS_OPENAI,
+    )
+    return (text, model) if text else None
 
 
 def make_claude_summarizer(api_key: str, model: str) -> Summarizer:

@@ -7,8 +7,10 @@ import type {
   Anomaly,
   BBox,
   CalendarResponse,
+  EnsoResponse,
   Hotspot,
   HotspotCoverage,
+  MonthExplanation,
   RawSensor,
   Resolution,
   TLE,
@@ -42,6 +44,8 @@ const json = async <T>(path: string, signal?: AbortSignal) => (await apiFetch(pa
 
 export const api = {
   searchAoi: (q: string, signal?: AbortSignal) => json<AOI[]>(`/api/aoi/search?${qs({ q })}`, signal),
+  aoiAt: (lat: number, lon: number, signal?: AbortSignal) =>
+    json<AOI>(`/api/aoi/at?${qs({ lat: String(lat), lon: String(lon) })}`, signal),
   calendar: (p: { aoi: string; from: string; to: string; resolution: Resolution }, signal?: AbortSignal) =>
     json<CalendarResponse>(`/api/calendar?${qs(p)}`, signal),
   hotspots: (p: { bbox: BBox; date: string; sensor: RawSensor }, signal?: AbortSignal) =>
@@ -54,8 +58,14 @@ export const api = {
   aoiGeometry: (aoi: string, signal?: AbortSignal) => json<AoiGeometry>(`/api/aoi/geometry?${qs({ aoi })}`, signal),
   hotspotsCoverage: (p: { bbox: BBox; from: string; to: string }, signal?: AbortSignal) =>
     json<HotspotCoverage>(`/api/hotspots/coverage?${qs({ bbox: p.bbox.join(','), from: p.from, to: p.to })}`, signal),
+  /** Ask the server to download a span from FIRMS in the background (the next timeline step). */
+  hotspotsWarm: (p: { bbox: BBox; from: string; to: string }) =>
+    apiFetch(`/api/hotspots/warm?${qs({ bbox: p.bbox.join(','), from: p.from, to: p.to })}`, { method: 'POST' }).then(() => undefined),
   anomalies: (aoi: string, signal?: AbortSignal) => json<Anomaly[]>(`/api/anomalies?${qs({ aoi })}`, signal),
+  enso: (aoi: string, signal?: AbortSignal) => json<EnsoResponse>(`/api/enso?${qs({ aoi })}`, signal),
   alerts: (aoi: string, signal?: AbortSignal) => json<AlertAssessment>(`/api/alerts?${qs({ aoi })}`, signal),
   alertsOverview: (signal?: AbortSignal) => json<AlertsOverview>('/api/alerts/overview', signal),
   tle: (signal?: AbortSignal) => json<TLE[]>('/api/satellites/tle', signal),
+  explainMonth: (p: { aoi: string; month: string; lang: string }, signal?: AbortSignal) =>
+    json<MonthExplanation>(`/api/v1/explain?${qs(p)}`, signal),
 };

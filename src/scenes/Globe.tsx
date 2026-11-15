@@ -4,7 +4,7 @@ import { BackSide, AdditiveBlending, ShaderMaterial, SRGBColorSpace, Texture, Te
 import { isMobile } from '@/lib/capabilities';
 import { latLonToXYZ, subsolar } from '@/lib/geo';
 import { simClock } from '@/lib/simClock';
-import { useStore } from '@/store';
+import { isLowPower, useStore } from '@/store';
 
 const sun = new Vector3(1, 0, 0);
 /** Sun direction in the Earth-fixed scene frame, shared by Earth and Atmosphere. */
@@ -51,6 +51,7 @@ const ATMO_FRAG = /* glsl */ `
 
 export function Earth() {
   const { gl, invalidate } = useThree();
+  const low = useStore(isLowPower);
   const material = useMemo(
     () =>
       new ShaderMaterial({
@@ -61,11 +62,17 @@ export function Earth() {
     [],
   );
 
-  // Progressive textures: 512 px first (≈12 KB for both), then 2K on mobile / 4K on desktop.
+  // Progressive textures: 512 px first (≈12 KB for both), then 2K night and 2K/4K day depending on viewport pixels.
   useEffect(() => {
     let alive = true;
     const loader = new TextureLoader();
-    const big = !isMobile() && gl.capabilities.maxTextureSize >= 4096 ? 4096 : 2048;
+    const dayRes =
+      !low &&
+      !isMobile() &&
+      gl.capabilities.maxTextureSize >= 4096 &&
+      gl.getPixelRatio() * Math.max(window.innerWidth, window.innerHeight) > 2000
+        ? 4096
+        : 2048;
     const load = (name: 'day' | 'night', res: number) =>
       loader.loadAsync(`${import.meta.env.BASE_URL}textures/earth-${name}-${res}.webp`).then((t) => {
         t.colorSpace = SRGBColorSpace;
@@ -78,18 +85,21 @@ export function Earth() {
       material.uniforms[key].value = t;
       invalidate();
     };
-    Promise.all([load('day', 512), load('night', 512)])
-      .then(([d, n]) => {
-        apply('uDay', d);
-        apply('uNight', n);
-        useStore.getState().set({ sceneReady: true });
-        return Promise.all([load('day', big).then((t) => apply('uDay', t)), load('night', big).then((t) => apply('uNight', t))]);
-      })
-      .catch(() => useStore.getState().set({ sceneReady: true }));
+    const full = () => Promise.all([load('day', dayRes).then((t) => apply('uDay', t)), load('night', 2048).then((t) => apply('uNight', t))]);
+    // a quality switch keeps the current picture and only swaps the day texture size
+    (material.uniforms.uDay.value
+      ? full()
+      : Promise.all([load('day', 512), load('night', 512)]).then(([d, n]) => {
+          apply('uDay', d);
+          apply('uNight', n);
+          useStore.getState().set({ sceneReady: true });
+          return full();
+        })
+    ).catch(() => useStore.getState().set({ sceneReady: true }));
     return () => {
       alive = false;
     };
-  }, [gl, invalidate, material]);
+  }, [gl, invalidate, material, low]);
 
   useFrame(() => {
     const p = subsolar(simClock.now());

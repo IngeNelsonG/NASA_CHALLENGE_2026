@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BufferAttribute, BufferGeometry, type LineSegments, type Mesh } from 'three';
 import { mesh as topoMesh } from 'topojson-client';
 import type { GeometryCollection } from 'topojson-specification';
+import { SENSOR_COLOR } from '@/lib/colors';
 import { latLonToXYZ } from '@/lib/geo';
 import type { Shape } from '@/lib/shape';
 import type { BBox } from '@/lib/types';
@@ -122,7 +123,7 @@ export function AoiOverlay() {
     <>
       {/* hidden until the outline is known, so a country never flashes as a big rectangle */}
       {!shapePending && points.length > 1 && (
-        <Line key={shape ? 'shape' : 'box'} points={points} segments={!!shape} color="#EAFE07" lineWidth={1.6} transparent opacity={0.9} depthWrite={false} />
+        <Line key={shape ? 'shape' : 'box'} points={points} segments={!!shape} color={SENSOR_COLOR.harmonized} lineWidth={1.6} transparent opacity={0.9} depthWrite={false} />
       )}
       <lineSegments ref={draft} visible={false}>
         <bufferGeometry />

@@ -1,8 +1,8 @@
 import { useT } from '@/app/i18n';
-import { Analyst } from '@/features/analyst/Analyst';
 import { Anomalies } from '@/features/anomalies/Anomalies';
 import { Explorer } from '@/features/explorer/Explorer';
 import { PickPanel, SatCard } from '@/features/explorer/Floating';
+import { Assistant } from '@/features/assistant/Assistant';
 import { Methodology } from '@/features/methodology/Methodology';
 import { Transparency } from '@/features/transparency/Transparency';
 import { Footer } from './Footer';
@@ -25,7 +25,6 @@ export default function Landing() {
         {/* the explorer holds the globe and, right under it, the burn calendar */}
         <Explorer />
         <Anomalies />
-        <Analyst />
         <Methodology />
         <Transparency />
         <Team />
@@ -33,6 +32,7 @@ export default function Landing() {
       <Footer />
       <SatCard />
       <PickPanel />
+      <Assistant />
     </div>
   );
 }

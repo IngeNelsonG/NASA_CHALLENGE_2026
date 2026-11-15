@@ -71,7 +71,7 @@ export function Hero() {
             <p className="mt-2.5 text-xs text-ink-dim">
               {t('aoi.current')}: <span className="font-semibold text-ink">{aoi.name}</span>
               <span aria-hidden> · </span>
-              <button type="button" className="underline underline-offset-4 hover:text-ink" onClick={() => goTo('calendar')}>
+              <button type="button" className="tap inline-flex items-center underline underline-offset-4 hover:text-ink" onClick={() => goTo('calendar')}>
                 {t('hero.calendar_cta')}
               </button>
             </p>
@@ -79,7 +79,7 @@ export function Hero() {
         </div>
 
         <div className="pointer-events-none relative z-10 mt-auto flex w-full items-end justify-between gap-4 pt-10">
-          <p className="data hidden text-left text-[11px] leading-relaxed text-cream/80 md:block">
+          <p className="data hidden text-left text-xs leading-relaxed text-cream/80 md:block">
             MODIS · 1 km
             <br />
             2000 →
@@ -88,7 +88,7 @@ export function Hero() {
             <RollText>{t('hero.discover')}</RollText>
             <span aria-hidden className="bob">↓</span>
           </a>
-          <p className="data hidden text-right text-[11px] leading-relaxed text-cream/80 md:block">
+          <p className="data hidden text-right text-xs leading-relaxed text-cream/80 md:block">
             VIIRS · 375 m
             <br />
             2012 →

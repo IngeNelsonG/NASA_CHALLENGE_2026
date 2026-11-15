@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { fmtInt, monthName, useT } from '@/app/i18n';
 import { calendarKey, useCalendar } from '@/app/loaders';
-import { Reveal, Segmented, Sparkle, Spinner, SplitWords } from '@/components/ui';
+import { Reveal, Segmented, Spinner, SplitWords } from '@/components/ui';
 import { fireGradientCss, NODATA_BG, NODATA_STROKE, ZERO_COLOR } from '@/lib/colors';
 import { RECORD_START } from '@/lib/env';
 import { todayIso } from '@/lib/geo';
@@ -24,7 +24,7 @@ function Legend({ max }: { max: number }) {
           {t('cal.legend_harmonized')}
         </p>
         <div aria-hidden className="h-2.5 rounded-sm" style={{ background: fireGradientCss }} />
-        <div className="data relative mt-0.5 h-3 text-[10px]" aria-hidden>
+        <div className="data relative mt-0.5 h-3 whitespace-nowrap text-xs" aria-hidden>
           <span className="absolute left-0">1</span>
           {ticks.map((k) => (
             <span key={k.f} className="absolute -translate-x-full" style={{ left: `${k.f * 100}%` }}>
@@ -65,9 +65,9 @@ function YearMonthTable({ cells, range, visible }: { cells: CalendarCell[]; rang
   }, [cells, range.from, range.to]);
   return (
     <div className={visible ? 'mt-4 max-h-[420px] overflow-auto rounded-lg border border-line' : 'sr-only'}>
-      <table className="data w-full border-collapse text-right text-[11px]">
+      <table className="data w-full border-collapse text-right text-xs">
         <caption className="sr-only">{t('cal.table_caption', { series: t('series.harmonized') })}</caption>
-        <thead className="sticky top-0 bg-space-800 text-ink-dim">
+        <thead className="sticky top-0 bg-graphite-800 text-ink-dim">
           <tr>
             <th scope="col" className="px-2 py-1.5 text-left">{t('time.year')}</th>
             {Array.from({ length: 12 }, (_, i) => (
@@ -107,7 +107,7 @@ function DateFilter({ range, onChange }: { range: DateRange; onChange: (r: DateR
   ];
   const isAll = range.from === RECORD_START && range.to === today;
   return (
-    <fieldset className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-line bg-space-900/50 p-3">
+    <fieldset className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-graphite-900/50 p-3">
       <legend className="px-1 text-xs font-semibold text-ink">{t('cal.filter')}</legend>
       <label className="text-xs text-ink-dim">
         {t('cal.from')}
@@ -135,13 +135,13 @@ function DateFilter({ range, onChange }: { range: DateRange; onChange: (r: DateR
         {presets.map((p) => {
           const on = p.r.from === range.from && p.r.to === range.to;
           return (
-            <button key={p.label} type="button" aria-pressed={on} onClick={() => onChange(p.r)} className={`btn !min-h-[36px] !px-2.5 !text-xs ${on ? 'btn-primary' : ''}`}>
+            <button key={p.label} type="button" aria-pressed={on} onClick={() => onChange(p.r)} className={`btn btn-sm ${on ? 'btn-primary' : ''}`}>
               {p.label}
             </button>
           );
         })}
       </div>
-      {!isAll && <p className="w-full text-[11px] text-ink-mute">{t('cal.filter_note')}</p>}
+      {!isAll && <p className="w-full text-xs text-ink-mute">{t('cal.filter_note')}</p>}
     </fieldset>
   );
 }
@@ -181,10 +181,7 @@ export default function CalendarSection() {
     <section id="calendar" className="relative scroll-mt-24 px-3 pb-6 pt-10 sm:px-6 lg:px-10 lg:pb-10 lg:pt-14 xl:pl-24" aria-labelledby="calendar-title">
       <header className="mb-6 flex flex-col gap-2 lg:mb-8 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
         <Reveal>
-          <p className="eyebrow flex items-center gap-3">
-            <Sparkle className="h-3 w-3 text-ember" />
-            {t('cal.eyebrow')}
-          </p>
+          <p className="eyebrow">{t('cal.eyebrow')}</p>
           <h2 id="calendar-title" className="mt-3 text-3xl leading-tight sm:text-4xl lg:text-5xl">
             <SplitWords text={t('cal.title')} />
           </h2>
@@ -193,7 +190,7 @@ export default function CalendarSection() {
           <p className="text-sm leading-relaxed text-ink-dim sm:text-[15px]">{t('cal.lead', { aoi: aoi.name })}</p>
         </Reveal>
       </header>
-      <div className="rounded-2xl border border-line bg-white/[0.025] p-4 sm:p-5">
+      <div className="panel p-5 sm:p-6">
         <div className="flex flex-wrap items-center gap-3">
           <Segmented<Resolution>
             label={t('cal.resolution')}
@@ -222,7 +219,7 @@ export default function CalendarSection() {
         </div>
 
         {monthlyOnly && (
-          <p role="note" className="mt-4 rounded-lg border border-harmonized/40 bg-harmonized/10 px-3 py-2 text-xs leading-relaxed text-ink">
+          <p role="note" className="mt-4 rounded-lg bg-harmonized/10 px-3 py-2 text-xs leading-relaxed text-ink">
             {t('cal.monthly_only')}
           </p>
         )}

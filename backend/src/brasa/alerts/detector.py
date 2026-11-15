@@ -25,6 +25,7 @@ SEVERITY_LABELS: dict[AlertSeverity, tuple[str, str]] = {
 }
 
 ENSO_THRESHOLD = 0.5
+ONI_LOOKBACK_MONTHS = 3
 MONTHS_IN_YEAR = 12
 MIN_PERSISTENCE_MONTHS = 2
 MIN_PERSISTENCE_COUNT = 3.0
@@ -66,6 +67,21 @@ def _enso_phase(oni: float | None) -> EnsoPhase:
     if oni <= -ENSO_THRESHOLD:
         return "LA_NINA"
     return "NEUTRAL"
+
+
+def _resolve_oni(ordered: Sequence[Mapping[str, Any]], latest_ts: pd.Timestamp) -> float | None:
+    """Return latest ONI, falling back to the most recent non-null value within 3 prior months."""
+    for row in reversed(ordered):
+        ts = pd.Timestamp(row["month"])
+        months_ago = (latest_ts.year - ts.year) * MONTHS_IN_YEAR + (latest_ts.month - ts.month)
+        if months_ago < 0:
+            continue
+        if months_ago > ONI_LOOKBACK_MONTHS:
+            break
+        val = row.get("oni")
+        if val is not None and not pd.isna(val):
+            return float(val)
+    return None
 
 
 def _fmt_es(val: float, decimals: int = 0) -> str:
@@ -287,12 +303,14 @@ def _build_narratives(
             f"climatological median) in {m_en} {latest_ts.year}."
         )
 
+    persist_es = "1 mes consecutivo" if persistence == 1 else f"{persistence} meses consecutivos"
+    persist_en = "1 consecutive month" if persistence == 1 else f"{persistence} consecutive months"
     tech_es = (
         f"Evaluación determinista NASA FIRMS para {region_name} ({m_es} {latest_ts.year}): "
         f"{_fmt_es(latest_h)} detecciones armonizadas frente a mediana histórica de "
         f"{_fmt_es(med)} (RIC Q1\u2013Q3: {_fmt_es(q25)}\u2013{_fmt_es(q75)}; p90: "
         f"{_fmt_es(p90)}). Desviación: {z_es} (z robusto: {rz_es}); razón: {ratio_es}; "
-        f"persistencia: {persistence} mes(es) consecutivos sobre umbral."
+        f"persistencia: {persist_es} sobre umbral."
         f"{unseasonal_es}{oni_str_es}"
     )
     tech_en = (
@@ -300,7 +318,7 @@ def _build_narratives(
         f"{latest_h:,.0f} harmonized detections vs. historical median {med:,.0f} "
         f"(IQR Q1\u2013Q3: {q25:,.0f}\u2013{q75:,.0f}; p90: {p90:,.0f}). "
         f"Departure: {z_en} (robust z: {robust_z:+.2f}); ratio: {ratio_en}; "
-        f"persistence: {persistence} consecutive month(s) above threshold."
+        f"persistence: {persist_en} above threshold."
         f"{unseasonal_en}{oni_str_en}"
     )
 
@@ -426,8 +444,7 @@ def evaluate_rows(
         and z >= UNSEASONAL_Z_MIN
         and latest_h > max(q75, UNSEASONAL_COUNT_FLOOR)
     )
-    oni = latest.get("oni")
-    oni_val = float(oni) if oni is not None else None
+    oni_val = _resolve_oni(ordered, latest_ts)
     enso = _enso_phase(oni_val)
 
     severity = _classify_severity(

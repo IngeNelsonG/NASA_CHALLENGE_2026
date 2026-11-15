@@ -13,7 +13,27 @@ export default {
           deep: '#E2D5C2',
         },
         coal: '#171411',
-        ember: '#F2703A',
+        graphite: {
+          950: '#0E0D0B',
+          900: '#141210',
+          800: '#1B1916',
+          700: '#24211D',
+          600: '#2F2B26',
+        },
+        accent: {
+          DEFAULT: '#E07A4A',
+          soft: 'rgb(224 122 74 / .14)',
+        },
+        ember: {
+          DEFAULT: '#E07A4A',
+          soft: 'rgb(224 122 74 / .14)',
+        },
+        sev: {
+          critical: '#D06B5E',
+          warning: '#CF9150',
+          watch: '#BFAE62',
+          normal: '#7E9F89',
+        },
         space: {
           950: '#04070F',
           900: '#070B14',
@@ -21,16 +41,9 @@ export default {
           700: '#111B33',
           600: '#1A2748',
         },
-        brand: {
-          deep: '#07173F',
-          electric: '#0042A6',
-          neon: '#0960E1',
-          yonder: '#2E96F5',
-          yellow: '#EAFE07',
-        },
-        modis: '#F57C2E',
-        viirs: '#3FA9F5',
-        harmonized: '#E3B62F',
+        modis: '#E08A55',
+        viirs: '#6FA3D6',
+        harmonized: '#CDAE52',
         ink: {
           DEFAULT: 'rgb(var(--ink) / <alpha-value>)',
           dim: 'rgb(var(--ink-dim) / <alpha-value>)',
@@ -44,7 +57,7 @@ export default {
         mono: ['"Overpass Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       boxShadow: {
-        panel: '0 8px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)',
+        panel: '0 1px 2px rgb(0 0 0 / .25), 0 8px 24px -12px rgb(0 0 0 / .35)',
       },
     },
   },

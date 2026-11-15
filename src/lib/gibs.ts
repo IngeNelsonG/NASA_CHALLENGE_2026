@@ -67,9 +67,12 @@ function frame(b: BBox): { box: BBox; height: number } {
 
 const r4 = (v: number) => Number(v.toFixed(4));
 
+/** GIBS and Worldview take longitudes in -180..180: areas stored past 180 are shifted back or cut there. */
+const wrap = ([w, s, e, n]: BBox): BBox => (w >= 180 ? [w - 360, s, e - 360, n] : [w, s, Math.min(e, 180), n]);
+
 /** WMS 1.3.0 GetMap; with EPSG:4326 the BBOX order is south,west,north,east. */
 export function gibsImage(bbox: BBox, date: string, view: ImageView, sensor: ImageSensor = imageSensor(date)) {
-  const { box, height } = frame(bbox);
+  const { box, height } = frame(wrap(bbox));
   const params = new URLSearchParams({
     SERVICE: 'WMS',
     REQUEST: 'GetMap',
@@ -86,6 +89,6 @@ export function gibsImage(bbox: BBox, date: string, view: ImageView, sensor: Ima
 }
 
 export function worldviewUrl(bbox: BBox, date: string, view: ImageView, sensor: ImageSensor = imageSensor(date)): string {
-  const params = new URLSearchParams({ v: bbox.map(r4).join(','), t: date, l: layers(sensor, view).reverse().join(',') });
+  const params = new URLSearchParams({ v: wrap(bbox).map(r4).join(','), t: date, l: layers(sensor, view).reverse().join(',') });
   return `https://worldview.earthdata.nasa.gov/?${params}`;
 }

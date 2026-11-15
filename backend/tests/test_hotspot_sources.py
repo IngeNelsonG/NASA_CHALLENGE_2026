@@ -9,13 +9,15 @@ from brasa.api.app import create_app
 from brasa.api.hotspot_sources import (
     FIRMS_MAX_SPAN_DAYS,
     FirmsHotspots,
+    areas_source,
     hotspot_source,
     merge_geometries,
     normalize_firms_frame,
+    parse_areas,
 )
 from brasa.api.service import CalendarService, CountryCalendars
 from brasa.config import Settings
-from brasa.domain.models import BoundingBox
+from brasa.domain.models import BoundingBox, InvalidBoundingBoxError
 from brasa.ingestion.boundaries import load_departments
 from brasa.ingestion.firms_client import FirmsSource
 
@@ -98,7 +100,8 @@ def test_firms_fetch_chunks_by_five_days_degrades_and_caches() -> None:
     firms = FirmsHotspots(fake, today=lambda: date(2026, 11, 14))  # type: ignore[arg-type]
     start, end = date(2024, 8, 1), date(2024, 8, 12)  # 12 days -> chunks of 5, 5, 2
     out = firms.fetch(ARGENTINA, start, end)
-    assert [c[1] for c in fake.calls if c[0] is FirmsSource.MODIS_SP] == [5, 5, 2]
+    # chunks run in parallel, so only the set of spans is fixed, not their order
+    assert sorted(c[1] for c in fake.calls if c[0] is FirmsSource.MODIS_SP) == [2, 5, 5]
     assert len(out) == 3  # MODIS rows only; the VIIRS failures were swallowed
     n_calls = len(fake.calls)
     firms.fetch(ARGENTINA, start, end)
@@ -145,3 +148,63 @@ def test_geometry_and_coverage_endpoints(ember_client: TestClient) -> None:
         params={"bbox": "-73.6,-55.1,-53.6,-21.8", "from": "2024-08-01", "to": "2024-08-31"},
     ).json()
     assert cov == {"source": "none", "firmsConfigured": False, "maxDays": FIRMS_MAX_SPAN_DAYS}
+
+
+def test_parse_areas_splits_at_the_antimeridian() -> None:
+    assert parse_areas("-74,2,-67,7") == [BoundingBox(-74, 2, -67, 7)]
+    # Russia is stored unwrapped (east 191): two boxes, one on each side of 180
+    assert parse_areas("19.6,41.2,191.0,81.8") == [
+        BoundingBox(19.6, 41.2, 180.0, 81.8),
+        BoundingBox(-180.0, 41.2, -169.0, 81.8),
+    ]
+    # an area wholly past 180 is shifted back
+    assert parse_areas("181,-20,185,-15") == [BoundingBox(-179, -20, -175, -15)]
+    for bad in ("1,2,3", "a,b,c,d", "10,0,5,1", "170,0,600,1"):
+        with pytest.raises(InvalidBoundingBoxError):
+            parse_areas(bad)
+
+
+def test_areas_source_reports_the_least_complete_part() -> None:
+    day = date(2024, 8, 1)
+    year_end = date(2024, 12, 31)
+    assert areas_source([INSIDE_COLOMBIA], day, year_end, firms_available=True) == "archive"
+    assert areas_source([INSIDE_COLOMBIA, ARGENTINA], day, day, firms_available=True) == "firms"
+    assert (
+        areas_source([INSIDE_COLOMBIA, ARGENTINA], day, year_end, firms_available=True)
+        == "too_long"
+    )
+
+
+def test_day_inside_a_cached_month_is_cut_from_it() -> None:
+    fake = _FakeClient()
+    firms = FirmsHotspots(fake, today=lambda: date(2026, 11, 14))  # type: ignore[arg-type]
+    month = firms.fetch(ARGENTINA, date(2024, 8, 1), date(2024, 8, 31))
+    n_calls = len(fake.calls)
+    day = firms.fetch(ARGENTINA, date(2024, 8, 6), date(2024, 8, 6))
+    assert len(fake.calls) == n_calls  # no new request
+    assert len(month) == 7  # one MODIS row per 5-day chunk
+    assert list(day["acq_date"].dt.date) == [date(2024, 8, 6)]
+
+
+def test_warm_downloads_once_in_the_background() -> None:
+    fake = _FakeClient()
+    firms = FirmsHotspots(fake, today=lambda: date(2026, 11, 14))  # type: ignore[arg-type]
+    start, end = date(2024, 8, 1), date(2024, 8, 10)
+    assert firms.warm(ARGENTINA, start, end) is True
+    out = firms.fetch(ARGENTINA, start, end)  # waits for, or reuses, the warm-up download
+    assert len(out) == 2
+    assert len(fake.calls) == 4  # 2 chunks x 2 sources, downloaded once
+    assert firms.warm(ARGENTINA, start, end) is False  # already cached
+
+
+def test_hotspot_endpoints_accept_areas_across_the_antimeridian(
+    ember_client: TestClient,
+) -> None:
+    params = {"bbox": "19.6,41.2,191.0,81.8", "from": "2024-08-01", "to": "2024-08-31"}
+    assert ember_client.get("/api/hotspots", params=params).json() == []
+    cov = ember_client.get("/api/hotspots/coverage", params=params)
+    assert cov.status_code == 200
+    assert cov.json()["source"] == "none"
+    assert ember_client.post("/api/hotspots/warm", params=params).json() == {"queued": False}
+    bad = {**params, "from": "2024-09-01"}
+    assert ember_client.get("/api/hotspots/coverage", params=bad).status_code == 422

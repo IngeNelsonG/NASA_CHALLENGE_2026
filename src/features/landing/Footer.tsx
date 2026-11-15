@@ -39,7 +39,7 @@ export function Footer() {
           {/* about */}
           <div>
             <p id="footer-title" className="flex items-center gap-2 font-display text-3xl text-cream">
-              <Sparkle className="h-5 w-5 text-ember" />
+              <Sparkle className="h-5 w-5 text-accent" />
               {APP_NAME}
             </p>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-dim">{t('footer.about')}</p>
@@ -47,7 +47,7 @@ export function Footer() {
               <img src={`${base}brand/space-apps-logo.png`} alt="NASA Space Apps Challenge" width={440} height={172} loading="lazy" className="h-auto w-36" />
               <img src={`${base}brand/usta-logo.png`} alt="Universidad Santo Tomás" width={280} height={280} loading="lazy" className="h-14 w-14 rounded-full bg-white object-cover" />
             </div>
-            <a href={TEAM_URL} target="_blank" rel="noreferrer" className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-ink underline-offset-4 hover:underline">
+            <a href={TEAM_URL} target="_blank" rel="noreferrer" className="tap mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-ink underline-offset-4 hover:underline">
               {t('footer.team')} <span aria-hidden>↗</span>
             </a>
           </div>
@@ -58,7 +58,7 @@ export function Footer() {
             <ul className="mt-4 space-y-3 text-sm">
               {SOURCES.map((s) => (
                 <li key={s.name} className="leading-snug">
-                  <a href={s.href} target="_blank" rel="noreferrer" className="font-semibold text-ink underline-offset-4 hover:underline">
+                  <a href={s.href} target="_blank" rel="noreferrer" className="tap inline-flex items-center font-semibold text-ink underline-offset-4 hover:underline">
                     {s.name}
                   </a>
                   <span className="block text-xs text-ink-dim">{t(s.note)}</span>
@@ -78,13 +78,13 @@ export function Footer() {
                 onClick={() => void downloadCsv({ kind: 'calendar', key: calendarKey(aoi.id, resolution), from: binStart(calRange.from, resolution), to: calRange.to }, `calendar_${slug}_${resolution}_${calRange.from}_${calRange.to}.csv`)}
               >
                 <span className="min-w-0 truncate">{t('data.csv_calendar', { aoi: aoi.name })}</span>
-                <span className="data shrink-0 text-[11px] text-ink-dim">CSV ↓</span>
+                <span className="shrink-0 text-xs text-ink-dim">CSV ↓</span>
               </button>
               <button type="button" className="btn justify-between text-left" disabled={!count} onClick={() => void downloadCsv({ kind: 'hotspots' }, `hotspots_${slug}_${range.from}_${range.to}.csv`)}>
                 <span className="min-w-0 truncate">{t('data.csv_hotspots')}</span>
-                <span className="data shrink-0 text-[11px] text-ink-dim">CSV ↓</span>
+                <span className="shrink-0 text-xs text-ink-dim">CSV ↓</span>
               </button>
-              <p className="data text-[11px] text-ink-mute">
+              <p className="data text-xs text-ink-mute">
                 {calRange.from} → {calRange.to} · {range.from === range.to ? range.from : `${range.from} → ${range.to}`}
               </p>
               {USE_MOCKS && <p className="text-xs text-ink-mute">{t('data.mock_note')}</p>}
@@ -92,10 +92,10 @@ export function Footer() {
 
             <h2 className="eyebrow mt-8">{t('nav.label')}</h2>
             <nav aria-label={t('footer.nav')} className="mt-3">
-              <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm">
+              <ul className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                 {SECTIONS.filter((id) => id !== 'data').map((id) => (
                   <li key={id}>
-                    <a href={`#${id}`} className="text-ink-dim transition-colors hover:text-ink">
+                    <a href={`#${id}`} className="tap inline-flex items-center text-ink-dim transition-colors hover:text-ink">
                       <RollText>{t(`nav.${id}`)}</RollText>
                     </a>
                   </li>
@@ -105,7 +105,7 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col gap-3 border-t border-line pt-6 text-[11px] leading-relaxed text-ink-mute lg:flex-row lg:items-end lg:justify-between lg:gap-10">
+        <div className="mt-12 flex flex-col gap-3 border-t border-line pt-6 text-xs leading-relaxed text-ink-mute lg:flex-row lg:items-end lg:justify-between lg:gap-10">
           <p className="max-w-3xl">
             {t('data.ack')} {t('data.footer')}
           </p>

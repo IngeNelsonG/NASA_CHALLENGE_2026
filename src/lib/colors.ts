@@ -2,13 +2,28 @@ import type { Sensor } from './types';
 
 /** One colour per instrument, used everywhere (globe, map, charts, satellites, legends). */
 export const SENSOR_COLOR: Record<Sensor, string> = {
-  modis: '#F57C2E',
-  viirs: '#3FA9F5',
-  harmonized: '#E3B62F',
+  modis: '#E08A55',
+  viirs: '#6FA3D6',
+  harmonized: '#CDAE52',
 };
 
 /** Every fire detection, whatever the sensor: the record is presented as one unified dataset. */
-export const HOTSPOT_COLOR = '#FF5A36';
+export const HOTSPOT_COLOR = '#E07A4A';
+
+/** Neutral warm chart chrome (gridlines, axis labels, marker halo). */
+export const CHART = {
+  grid: 'rgba(239,233,224,0.10)',
+  axis: '#9A9184',
+  halo: '#0E0D0B',
+} as const;
+
+/** Muted severity palette matching tailwind `sev.*` tokens. */
+export const SEV_COLOR = {
+  critical: '#D06B5E',
+  warning: '#CF9150',
+  watch: '#BFAE62',
+  normal: '#7E9F89',
+} as const;
 
 /** Observed zero (distinct from "no observation", which is hatched). */
 export const ZERO_COLOR = '#161B2B';

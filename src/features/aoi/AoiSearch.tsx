@@ -73,10 +73,10 @@ export function AoiSearch({ onSelect, compact = false }: { onSelect?: (aoi: AOI)
               onMouseEnter={() => setActive(i)}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => choose(a)}
-              className={`flex cursor-pointer items-baseline justify-between gap-3 rounded-md px-2.5 py-2 text-sm ${i === active ? 'bg-space-600 text-ink' : 'text-ink-dim'}`}
+              className={`flex cursor-pointer items-baseline justify-between gap-3 rounded-md px-2.5 py-2 text-sm ${i === active ? 'bg-graphite-600 text-ink' : 'text-ink-dim'}`}
             >
               <span>{a.name}</span>
-              <span className="data shrink-0 text-[11px] text-ink-mute">
+              <span className="data shrink-0 text-xs text-ink-mute">
                 {a.bbox[1].toFixed(1)}, {a.bbox[0].toFixed(1)}
               </span>
             </li>

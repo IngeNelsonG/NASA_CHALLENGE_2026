@@ -102,7 +102,8 @@ def test_zero_baseline_surge_flagged_as_anomaly() -> None:
 
 
 def test_generative_llm_disabled_by_default_even_with_keys() -> None:
-    settings = Settings(
+    settings = Settings(  # type: ignore[call-arg]  # pydantic-settings init option
+        _env_file=None,  # the code default, not a developer's local .env
         environment="test",
         data_dir=str(DATA_DIR),
         anthropic_api_key=SecretStr("sk-ant-should-not-call"),

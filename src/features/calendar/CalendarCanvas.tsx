@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { fmtDay, fmtInt, fmtMonth, monthName, useT } from '@/app/i18n';
-import { fireColor, noDataPattern, SENSOR_COLOR } from '@/lib/colors';
+import { CHART, fireColor, noDataPattern, SENSOR_COLOR } from '@/lib/colors';
+import { fmtSigma } from '@/lib/format';
 import { doyOf, yearStartIdx } from '@/lib/geo';
 import type { CalendarCell, CalendarData, Resolution } from '@/lib/types';
 import { useStore, type DateRange } from '@/store';
@@ -115,14 +116,14 @@ export function CalendarCanvas({ data, resolution, range, selectedDate, highligh
       ctx.lineJoin = 'round';
       ctx.stroke();
     }
-    ctx.strokeStyle = 'rgba(148,170,220,0.22)';
+    ctx.strokeStyle = CHART.grid;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(GUTTER_L, CLIM_H - 5.5);
     ctx.lineTo(width, CLIM_H - 5.5);
     ctx.stroke();
     ctx.font = mono;
-    ctx.fillStyle = '#A9B4CC';
+    ctx.fillStyle = CHART.axis;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'right';
     ctx.fillText(fmtInt(cMax, lang), GUTTER_L - 6, cy(cMax));
@@ -132,10 +133,10 @@ export function CalendarCanvas({ data, resolution, range, selectedDate, highligh
     ctx.textAlign = 'left';
     for (let m = 0; m < 12; m++) {
       const mx = x(monthStartCol(m, resolution));
-      ctx.fillStyle = '#A9B4CC';
+      ctx.fillStyle = CHART.axis;
       ctx.fillText(monthName(m, lang, cellW * cols < 520 ? 'narrow' : 'short'), mx + 2, CLIM_H + AXIS_H / 2);
       if (m && resolution !== 'month') {
-        ctx.fillStyle = 'rgba(148,170,220,0.16)';
+        ctx.fillStyle = CHART.grid;
         ctx.fillRect(Math.round(mx) - 0.5, CLIM_H - 5, 1, height);
       }
     }
@@ -143,7 +144,7 @@ export function CalendarCanvas({ data, resolution, range, selectedDate, highligh
     // grid
     const w = Math.max(0.5, cellW - gap);
     for (let yr = Y0; yr <= yearNow; yr++) {
-      ctx.fillStyle = yr % 5 === 0 ? '#E8EDF7' : '#7C89A6';
+      ctx.fillStyle = yr % 5 === 0 ? '#EFE9E0' : CHART.axis;
       ctx.textAlign = 'right';
       ctx.fillText(String(yr), GUTTER_L - 6, y(yr) + rowH / 2 + 0.5);
       for (let c = 0; c < cols; c++) {
@@ -161,14 +162,14 @@ export function CalendarCanvas({ data, resolution, range, selectedDate, highligh
       if (yr < Y0 || yr > yearNow) return;
       const c = colOf(iso, resolution);
       const ow = Math.max(4, w);
-      ctx.strokeStyle = '#04070F';
+      ctx.strokeStyle = CHART.halo;
       ctx.lineWidth = lw + 2;
       ctx.strokeRect(x(c) - 1, y(yr) - 1, ow + 2, rowH + 2);
       ctx.strokeStyle = color;
       ctx.lineWidth = lw;
       ctx.strokeRect(x(c) - 1, y(yr) - 1, ow + 2, rowH + 2);
     };
-    for (const d of highlightDates) outline(d, '#EAFE07', 1.5);
+    for (const d of highlightDates) outline(d, SENSOR_COLOR.harmonized, 1.5);
     if (selectedDate) outline(selectedDate, '#ffffff', 1.5);
     if (focus) {
       ctx.strokeStyle = '#ffffff';
@@ -211,7 +212,7 @@ export function CalendarCanvas({ data, resolution, range, selectedDate, highligh
   const cell = focus ? cellAt(focus.year, focus.col) : undefined;
   const dateLabel = (c: CalendarCell) => (resolution === 'month' ? fmtMonth(c.date, lang) : resolution === 'week' ? t('cal.week_of', { date: fmtDay(c.date, lang) }) : fmtDay(c.date, lang));
   const obs = (v: number | null) => (v === null ? t('common.no_obs') : fmtInt(v, lang));
-  const zText = (z: number) => `${z > 0 ? '+' : ''}${z.toFixed(1)} σ · ${t(Math.abs(z) < 1 ? 'cal.z_normal' : z > 0 ? (z >= 2 ? 'cal.z_far_above' : 'cal.z_above') : z <= -2 ? 'cal.z_far_below' : 'cal.z_below')}`;
+  const zText = (z: number) => `${fmtSigma(z, lang, 1)} · ${t(Math.abs(z) < 1 ? 'cal.z_normal' : z > 0 ? (z >= 2 ? 'cal.z_far_above' : 'cal.z_above') : z <= -2 ? 'cal.z_far_below' : 'cal.z_below')}`;
 
   const tipX = focus ? GUTTER_L + (focus.col + 0.5) * cellW : 0;
   const tipY = focus ? gridTop + (focus.year - Y0) * (rowH + rowGap) : 0;
@@ -288,7 +289,7 @@ export function CalendarCanvas({ data, resolution, range, selectedDate, highligh
               </>
             )}
           </dl>
-          {cell.harmonized !== null && <p className="mt-2 text-[11px] leading-snug text-ink-mute">{t('cal.estimate_note')}</p>}
+          {cell.harmonized !== null && <p className="mt-2 text-xs leading-snug text-ink-mute">{t('cal.estimate_note')}</p>}
         </div>
       )}
       <p id="cal-live" aria-live="polite" className="sr-only">

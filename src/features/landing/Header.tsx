@@ -45,12 +45,12 @@ export function Header() {
     <>
       <header
         className={`fixed inset-x-3 top-3 z-50 mx-auto max-w-[1400px] rounded-2xl border transition-[background-color,border-color,box-shadow] duration-500 sm:inset-x-5 sm:top-5 lg:inset-x-8 lg:top-7 ${
-          scrolled || open ? 'border-line bg-space-950/95 shadow-panel backdrop-blur-md' : 'border-transparent bg-transparent'
+          scrolled || open ? 'border-line bg-graphite-950/95 shadow-panel backdrop-blur-md' : 'border-transparent bg-transparent'
         }`}
       >
         <div className="flex h-14 items-center gap-3 px-4 lg:gap-5 lg:px-6">
-          <a href="#hero" onClick={() => setOpen(false)} className="flex items-center gap-2 font-display text-lg tracking-wide text-ink">
-            <Sparkle className="h-3.5 w-3.5 text-ember" />
+          <a href="#hero" onClick={() => setOpen(false)} className="tap flex items-center gap-2 whitespace-nowrap font-display text-lg tracking-wide text-ink">
+            <Sparkle className="h-3.5 w-3.5 text-accent" />
             {APP_NAME}
           </a>
           {USE_MOCKS && (
@@ -74,20 +74,20 @@ export function Header() {
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
-              className="btn !min-h-[38px] font-mono"
+              className="btn btn-sm"
               onClick={() => setLang(lang === 'en' ? 'es' : 'en')}
               aria-label={t('header.lang')}
               lang={lang === 'en' ? 'es' : 'en'}
             >
               {lang === 'en' ? 'ES' : 'EN'}
             </button>
-            <a href="#explore" className="btn btn-primary hidden !min-h-[38px] !px-5 xl:inline-flex">
+            <a href="#explore" className="btn btn-primary btn-sm hidden !px-5 xl:inline-flex">
               <RollText>{t('hero.cta')}</RollText>
               <span aria-hidden className="btn-plus">+</span>
             </a>
             <button
               type="button"
-              className="btn btn-icon !min-h-[38px] !min-w-[38px] lg:hidden"
+              className="btn btn-icon lg:hidden"
               aria-expanded={open}
               aria-controls="mobile-menu"
               aria-label={t(open ? 'header.menu_close' : 'header.menu_open')}
@@ -104,7 +104,7 @@ export function Header() {
       </header>
 
       {open && (
-        <div id="mobile-menu" className="menu-in fixed inset-0 z-40 overflow-y-auto bg-space-950 px-6 pb-10 pt-28 lg:hidden">
+        <div id="mobile-menu" className="menu-in fixed inset-0 z-40 overflow-y-auto bg-graphite-950 px-6 pb-10 pt-28 lg:hidden">
           <nav aria-label={t('nav.label')}>
             <ol className="flex flex-col">
               {LINKS.map((id, i) => (
