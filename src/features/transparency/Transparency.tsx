@@ -244,7 +244,7 @@ export function Transparency() {
       <div className="mt-10 divide-y divide-line border-y border-line">
         {METHOD_ITEMS.map((c, idx) => (
           <details key={c.n} open={idx === 0} className="group py-4">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-1 text-left [&::-webkit-details-marker]:hidden">
+            <summary className="tap flex cursor-pointer list-none items-center justify-between gap-4 py-1 text-left [&::-webkit-details-marker]:hidden">
               <span className="flex items-baseline gap-3">
                 <span className="data text-xs text-ink-mute">{c.n}</span>
                 <span className="text-base font-semibold text-ink sm:text-lg">{t(c.title).replace(/^\d+\.\s*/, '')}</span>

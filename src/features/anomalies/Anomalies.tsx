@@ -559,7 +559,7 @@ export function Anomalies() {
                       aria-selected={active}
                       aria-controls={`alert-panel-${item.id}`}
                       onClick={() => setAlertTab(item.id)}
-                      className={`min-h-[34px] rounded-md px-3 text-xs font-semibold transition-colors duration-200 ${
+                      className={`min-h-10 rounded-md px-3 text-xs font-semibold transition-colors duration-200 ${
                         active ? 'bg-cream text-coal' : 'text-ink-dim hover:bg-graphite-700 hover:text-ink'
                       }`}
                     >
@@ -706,12 +706,12 @@ export function Anomalies() {
               placeholder={t('anom.filter_ph')}
               className="input max-w-xs !py-1.5 text-xs"
             />
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-ink-dim">
+            <label className="tap flex cursor-pointer items-center gap-2 text-xs text-ink-dim">
               <input
                 type="checkbox"
                 checked={activeOnly}
                 onChange={(e) => setActiveOnly(e.target.checked)}
-                className="accent-accent"
+                className="h-4 w-4 accent-accent"
               />
               {t('anom.active_only')}
             </label>
@@ -726,7 +726,7 @@ export function Anomalies() {
                 setSortKey(next);
                 setSortDir(next === 'territory' || next === 'authority' ? 'asc' : 'desc');
               }}
-              className="input !min-h-8 w-auto !py-1 text-xs"
+              className="input min-h-8 w-auto py-1 text-xs"
             >
               <option value="level">{t('anom.col_level')}</option>
               <option value="z">{t('anom.col_sigma')}</option>

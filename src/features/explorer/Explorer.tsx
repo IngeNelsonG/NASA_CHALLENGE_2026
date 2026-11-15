@@ -71,8 +71,8 @@ export function Explorer() {
             {t('globe.help')}
           </p>
 
-          {/* zoom: small, out of the way, over the globe */}
-          <div className="absolute right-3 top-[4.75rem] z-10 flex flex-col gap-1.5 sm:right-5 lg:right-6 lg:top-24">
+          {/* zoom: over the globe; on phones at its lower corner, inside the thumb's easy reach */}
+          <div className="absolute right-3 top-[calc(max(60svh,340px)-0.75rem)] z-10 flex -translate-y-full flex-col gap-2 sm:right-5 lg:right-6 lg:top-24 lg:translate-y-0">
             <button type="button" className="btn btn-icon" onClick={() => view.zoomBy(1.4)} aria-label={t('globe.zoom_in')}>
               <span aria-hidden>+</span>
             </button>

@@ -108,16 +108,16 @@
   }
 
   .btn {
-    @apply inline-flex min-h-[40px] items-center justify-center gap-2 rounded-lg border border-line bg-graphite-700/80 px-3.5 py-2 text-sm font-semibold text-ink transition-[background-color,border-color,transform] duration-200 hover:border-cream/40 hover:bg-graphite-600 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-[40px] items-center justify-center gap-2 rounded-lg border border-line bg-graphite-700/80 px-4 py-2 text-sm font-semibold text-ink transition-[background-color,border-color,transform] duration-200 hover:border-cream/40 hover:bg-graphite-600 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
     @apply border-transparent bg-cream text-coal hover:border-transparent hover:bg-white;
   }
   .btn-sm {
-    @apply min-h-8 px-2.5 py-1 text-xs;
+    @apply min-h-8 px-3 py-1 text-xs;
   }
   .btn-icon {
-    @apply min-h-[36px] min-w-[36px] px-2 py-1.5;
+    @apply min-h-[40px] min-w-[40px] p-2;
   }
   /* "+" that turns on hover, as a small signature on call-to-action buttons */
   .btn-plus {
@@ -309,5 +309,34 @@ a:focus-visible > .roll > span:last-child {
   .split-w > span {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Tap targets
+   Heights sit on the 8 px grid (32 / 40 / 48). Text links and toggles get at least 24 px
+   (WCAG 2.5.8 AA); on touch screens everything grows to 44 px (WCAG AAA, Apple HIG) and the
+   main buttons to 48 px (Material). Unlayered, so it wins over height utilities.
+   --------------------------------------------------------------------------------------------- */
+.tap,
+input[type='range'] {
+  min-height: 24px;
+}
+@media (pointer: coarse) {
+  .btn,
+  .input {
+    min-height: 48px;
+  }
+  .btn-sm,
+  .chip-btn,
+  .tap,
+  input[type='range'],
+  button[role='radio'],
+  button[role='tab'] {
+    min-height: 44px;
+  }
+  .btn-icon {
+    min-height: 48px;
+    min-width: 48px;
   }
 }

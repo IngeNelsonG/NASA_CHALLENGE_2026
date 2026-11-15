@@ -49,7 +49,7 @@ export function Header() {
         }`}
       >
         <div className="flex h-14 items-center gap-3 px-4 lg:gap-5 lg:px-6">
-          <a href="#hero" onClick={() => setOpen(false)} className="flex items-center gap-2 whitespace-nowrap font-display text-lg tracking-wide text-ink">
+          <a href="#hero" onClick={() => setOpen(false)} className="tap flex items-center gap-2 whitespace-nowrap font-display text-lg tracking-wide text-ink">
             <Sparkle className="h-3.5 w-3.5 text-accent" />
             {APP_NAME}
           </a>

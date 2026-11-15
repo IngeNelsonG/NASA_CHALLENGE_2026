@@ -80,7 +80,7 @@ export function SatelliteImage() {
           {isPeak && t('satimg.peak')}
         </p>
         <p className="mt-1 text-ink-mute">{t(`satimg.note_${view}`)}</p>
-        <a href={worldviewUrl(bbox, day, view, sensor)} target="_blank" rel="noreferrer" className="mt-1.5 inline-flex items-center gap-1 font-semibold text-ink underline-offset-4 hover:underline">
+        <a href={worldviewUrl(bbox, day, view, sensor)} target="_blank" rel="noreferrer" className="tap mt-1.5 inline-flex items-center gap-1 font-semibold text-ink underline-offset-4 hover:underline">
           {t('satimg.worldview')} <span aria-hidden>↗</span>
           <span className="sr-only">{t('satimg.new_tab')}</span>
         </a>

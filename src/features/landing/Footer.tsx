@@ -47,7 +47,7 @@ export function Footer() {
               <img src={`${base}brand/space-apps-logo.png`} alt="NASA Space Apps Challenge" width={440} height={172} loading="lazy" className="h-auto w-36" />
               <img src={`${base}brand/usta-logo.png`} alt="Universidad Santo Tomás" width={280} height={280} loading="lazy" className="h-14 w-14 rounded-full bg-white object-cover" />
             </div>
-            <a href={TEAM_URL} target="_blank" rel="noreferrer" className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-ink underline-offset-4 hover:underline">
+            <a href={TEAM_URL} target="_blank" rel="noreferrer" className="tap mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-ink underline-offset-4 hover:underline">
               {t('footer.team')} <span aria-hidden>↗</span>
             </a>
           </div>
@@ -58,7 +58,7 @@ export function Footer() {
             <ul className="mt-4 space-y-3 text-sm">
               {SOURCES.map((s) => (
                 <li key={s.name} className="leading-snug">
-                  <a href={s.href} target="_blank" rel="noreferrer" className="font-semibold text-ink underline-offset-4 hover:underline">
+                  <a href={s.href} target="_blank" rel="noreferrer" className="tap inline-flex items-center font-semibold text-ink underline-offset-4 hover:underline">
                     {s.name}
                   </a>
                   <span className="block text-xs text-ink-dim">{t(s.note)}</span>
@@ -92,10 +92,10 @@ export function Footer() {
 
             <h2 className="eyebrow mt-8">{t('nav.label')}</h2>
             <nav aria-label={t('footer.nav')} className="mt-3">
-              <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm">
+              <ul className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                 {SECTIONS.filter((id) => id !== 'data').map((id) => (
                   <li key={id}>
-                    <a href={`#${id}`} className="text-ink-dim transition-colors hover:text-ink">
+                    <a href={`#${id}`} className="tap inline-flex items-center text-ink-dim transition-colors hover:text-ink">
                       <RollText>{t(`nav.${id}`)}</RollText>
                     </a>
                   </li>

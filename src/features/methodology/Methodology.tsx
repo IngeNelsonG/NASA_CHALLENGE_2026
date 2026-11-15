@@ -141,7 +141,7 @@ export function Methodology() {
           <h3 className="text-xl font-semibold text-ink">{t('method.unc_title')}</h3>
           <p className="mt-3 text-sm leading-relaxed text-ink-dim">{t('method.unc_body')}</p>
           <details className="mt-4 text-xs">
-            <summary className="cursor-pointer select-none font-semibold text-ink hover:text-ink-dim">
+            <summary className="cursor-pointer select-none py-1 font-semibold text-ink hover:text-ink-dim [@media(pointer:coarse)]:py-3.5">
               {t('trans.show_formula')}
             </summary>
             <p className="data mt-3 overflow-x-auto rounded-lg border border-line bg-cream-deep/70 p-3.5 leading-relaxed text-ink">

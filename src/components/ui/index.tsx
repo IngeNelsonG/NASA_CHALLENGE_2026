@@ -97,7 +97,7 @@ export function Segmented<T extends string>({
             aria-checked={on}
             title={o.title}
             onClick={() => onChange(o.value)}
-            className={`rounded-md font-semibold transition-colors duration-300 ${size === 'sm' ? 'min-h-[30px] px-2 text-xs' : 'min-h-[36px] px-3 text-sm'} ${
+            className={`rounded-md font-semibold transition-colors duration-300 ${size === 'sm' ? 'min-h-8 px-2 text-xs' : 'min-h-10 px-3 text-sm'} ${
               on ? 'bg-cream text-coal' : 'text-ink-dim hover:bg-graphite-700 hover:text-ink'
             }`}
           >
@@ -137,7 +137,7 @@ export function SectionHeading({ id, eyebrow, title, lead }: { id?: string; eyeb
 
 export function Toggle({ checked, onChange, children }: { checked: boolean; onChange: () => void; children: ReactNode }) {
   return (
-    <label className="flex min-h-[32px] cursor-pointer items-center gap-2.5 text-sm text-ink">
+    <label className="tap flex min-h-8 cursor-pointer items-center gap-2.5 text-sm text-ink">
       <input type="checkbox" checked={checked} onChange={onChange} className="peer sr-only" />
       <span
         aria-hidden

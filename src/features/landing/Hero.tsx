@@ -71,7 +71,7 @@ export function Hero() {
             <p className="mt-2.5 text-xs text-ink-dim">
               {t('aoi.current')}: <span className="font-semibold text-ink">{aoi.name}</span>
               <span aria-hidden> · </span>
-              <button type="button" className="underline underline-offset-4 hover:text-ink" onClick={() => goTo('calendar')}>
+              <button type="button" className="tap inline-flex items-center underline underline-offset-4 hover:text-ink" onClick={() => goTo('calendar')}>
                 {t('hero.calendar_cta')}
               </button>
             </p>
