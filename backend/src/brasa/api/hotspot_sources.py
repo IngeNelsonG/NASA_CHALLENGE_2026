@@ -22,7 +22,7 @@ from typing import Any, Literal
 import pandas as pd
 
 from brasa.domain.models import COLOMBIA, MAX_LONGITUDE, BoundingBox, InvalidBoundingBoxError
-from brasa.ingestion.firms_client import MAX_DAY_RANGE, FirmsClient, FirmsSource
+from brasa.ingestion.firms_client import MAX_DAY_RANGE, FirmsAuthError, FirmsClient, FirmsSource
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,8 @@ Source = Literal["archive", "firms", "partial", "too_long", "none"]
 _SOURCE_RANK: dict[Source, int] = {"archive": 0, "firms": 1, "partial": 2, "none": 3, "too_long": 4}
 FULL_TURN = 360.0
 BBOX_PARTS = 4
+FULL_WORLD_MIN_LON_SPAN = 350.0
+FULL_WORLD_MIN_LAT_SPAN = 170.0
 
 
 def parse_areas(raw: str) -> list[BoundingBox]:
@@ -110,6 +112,11 @@ def hotspot_source(area: BoundingBox, start: date, end: date, *, firms_available
     """Which source answers a hotspot request (see the module docstring)."""
     if archive_covers(area):
         return "archive"
+    if (
+        (area.east - area.west) >= FULL_WORLD_MIN_LON_SPAN
+        and (area.north - area.south) >= FULL_WORLD_MIN_LAT_SPAN
+    ):
+        return "none"
     if firms_available:
         return "firms" if (end - start).days + 1 <= FIRMS_MAX_SPAN_DAYS else "too_long"
     return "partial" if overlaps_archive(area) else "none"
@@ -178,7 +185,13 @@ class FirmsHotspots:
         self._cache: OrderedDict[tuple[str, date, date], pd.DataFrame] = OrderedDict()
         self._inflight: dict[tuple[str, date, date], Future[pd.DataFrame]] = {}
         self._lock = threading.Lock()
+        self._auth_failed = False
         self._background = ThreadPoolExecutor(max_workers=2, thread_name_prefix="firms-warm")
+
+    @property
+    def available(self) -> bool:
+        """False once NASA FIRMS rejects the MAP_KEY, stopping futile retry floods."""
+        return not self._auth_failed
 
     def _cached(self, key: tuple[str, date, date]) -> pd.DataFrame | None:
         """Exact hit, or the slice of a cached span containing this one. Caller holds the lock."""
@@ -195,6 +208,8 @@ class FirmsHotspots:
         return None
 
     def fetch(self, area: BoundingBox, start: date, end: date) -> pd.DataFrame:
+        if self._auth_failed:
+            return pd.DataFrame(columns=OUT_COLS)
         key = (area.as_firms_area(), start, end)
         with self._lock:
             hit = self._cached(key)
@@ -223,6 +238,8 @@ class FirmsHotspots:
 
     def warm(self, area: BoundingBox, start: date, end: date) -> bool:
         """Download a span in the background; False when it is already cached or downloading."""
+        if self._auth_failed:
+            return False
         key = (area.as_firms_area(), start, end)
         with self._lock:
             if key in self._inflight or self._cached(key) is not None:
@@ -242,8 +259,20 @@ class FirmsHotspots:
 
         def one(job: tuple[FirmsSource, date, int]) -> pd.DataFrame:
             source, day, span = job
+            if self._auth_failed:
+                return pd.DataFrame(columns=OUT_COLS)
             try:
                 return normalize_firms_frame(self._client.fetch_area(source, area, day, span))
+            except FirmsAuthError:
+                with self._lock:
+                    first = not self._auth_failed
+                    self._auth_failed = True
+                if first:
+                    logger.warning(
+                        "NASA FIRMS rejected BRASA_FIRMS_MAP_KEY (Invalid MAP_KEY); "
+                        "disabling live FIRMS point downloads until a valid key is configured."
+                    )
+                return pd.DataFrame(columns=OUT_COLS)
             except Exception:  # network, HTTP or CSV errors: degrade, never raise
                 logger.warning("FIRMS area request failed (source=%s, start=%s)", source, day)
                 return pd.DataFrame(columns=OUT_COLS)
