@@ -24,7 +24,7 @@ function Toggle({ label, hint, on, onChange }: { label: string; hint: string; on
   );
 }
 
-/** Two round buttons next to the help button: dark mode, and the accessibility options. */
+/** Round accessibility button next to the help button. */
 export function QuickSettings() {
   const t = useT();
   const { theme, text, contrast, motion, setPrefs, resetA11y } = usePrefs();
@@ -46,7 +46,6 @@ export function QuickSettings() {
   // the globe is drawn on demand: ask for a frame so it picks the change up
   useEffect(() => view.kick(), [theme, text, motion]);
 
-  const dark = theme === 'dark';
   return (
     <div ref={wrap} className="fixed bottom-[1.375rem] right-[5.25rem] z-50 flex items-center gap-2 sm:bottom-[1.875rem] sm:right-[5.75rem]">
       {open && (
@@ -74,32 +73,12 @@ export function QuickSettings() {
           <div className="mt-2 space-y-0.5">
             <Toggle label={t('a11y.contrast')} hint={t('a11y.contrast_hint')} on={contrast} onChange={(v) => setPrefs({ contrast: v })} />
             <Toggle label={t('a11y.motion')} hint={t('a11y.motion_hint')} on={motion} onChange={(v) => setPrefs({ motion: v })} />
-            <Toggle label={t('theme.dark')} hint={t('theme.dark_hint')} on={dark} onChange={(v) => setPrefs({ theme: v ? 'dark' : 'light' })} />
           </div>
           <button type="button" className="btn btn-sm mt-2 w-full" onClick={resetA11y}>
             {t('a11y.reset')}
           </button>
         </div>
       )}
-      <button
-        type="button"
-        className="btn h-11 w-11 rounded-full !bg-graphite-800 !p-0 shadow-panel"
-        aria-pressed={dark}
-        aria-label={t(dark ? 'theme.to_light' : 'theme.to_dark')}
-        title={t(dark ? 'theme.to_light' : 'theme.to_dark')}
-        onClick={() => setPrefs({ theme: dark ? 'light' : 'dark' })}
-      >
-        <svg aria-hidden viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          {dark ? (
-            <>
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-            </>
-          ) : (
-            <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
-          )}
-        </svg>
-      </button>
       <button
         type="button"
         className="btn h-11 w-11 rounded-full !bg-graphite-800 !p-0 shadow-panel"

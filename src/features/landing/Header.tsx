@@ -3,6 +3,7 @@ import { useT } from '@/app/i18n';
 import { RollText, Sparkle } from '@/components/ui';
 import { APP_NAME, USE_MOCKS } from '@/lib/env';
 import { useStore } from '@/store';
+import { usePrefs } from '@/store/prefs';
 import { SECTIONS } from './OrbitNav';
 
 const LINKS = SECTIONS.slice(1);
@@ -18,6 +19,8 @@ export function Header() {
   const lang = useStore((s) => s.lang);
   const section = useStore((s) => s.section);
   const setLang = useStore((s) => s.setLang);
+  const { theme, setPrefs } = usePrefs();
+  const dark = theme === 'dark';
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -74,6 +77,25 @@ export function Header() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-sm !px-2.5"
+              aria-pressed={dark}
+              aria-label={t(dark ? 'theme.to_light' : 'theme.to_dark')}
+              title={t(dark ? 'theme.to_light' : 'theme.to_dark')}
+              onClick={() => setPrefs({ theme: dark ? 'light' : 'dark' })}
+            >
+              <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                {dark ? (
+                  <>
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+                  </>
+                ) : (
+                  <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
+                )}
+              </svg>
+            </button>
             <button
               type="button"
               className="btn btn-sm"
