@@ -8,7 +8,7 @@
     "api/index.py": {
       "maxDuration": 120,
       "includeFiles": "backend/{src,data}/**",
-      "excludeFiles": "{node_modules/**,dist/**,public/**,src/**,scripts/**,backend/tests/**,backend/scripts/**,backend/.venv/**,**/__pycache__/**,.vercel_python_packages/**,_uv/**}"
+      "excludeFiles": "{node_modules/**,dist/**,docs/**,public/**,src/**,scripts/**,backend/tests/**,backend/scripts/**,backend/.venv/**,**/__pycache__/**,.vercel_python_packages/**,_uv/**}"
     }
   },
   "rewrites": [
