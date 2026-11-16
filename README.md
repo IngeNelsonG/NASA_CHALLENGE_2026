@@ -1,170 +1,348 @@
-# Ember — harmonized MODIS + VIIRS fire activity
+<div align="center">
 
-[![CI/CD](https://github.com/IngeNelsonG/NASA_CHALLENGE_2026/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/IngeNelsonG/NASA_CHALLENGE_2026/actions/workflows/ci-cd.yml)
+<a href="https://nasaspace.site">
+  <img src="docs/assets/banner.webp" alt="Ember running at nasaspace.site: the EMBER wordmark over a night-side Earth dotted with active fires" width="100%">
+</a>
 
-**Live: <https://nasaspace.site>** (also <https://nasachallenge2026.vercel.app>)
+# Ember
 
-Frontend for the NASA Space Apps Challenge 2026 challenge **"Harmonization of MODIS and VIIRS Hot Spots"** (authored by CONAE).
-It turns two fire records that cannot be compared directly — MODIS (1 km, 2000→) and VIIRS (375 m, 2012→) — into one burn-activity calendar for an area of interest.
+### Twenty-six years of fire, one comparable record.
 
-> Documentación completa de física radiativa (Planck/Wien), estadística de anomalías, alertas CAP-1.2, GOES-16/18/19 ABI y ciclo de vida 2027+: [`TRANSPARENCIA_CIENTIFICA_Y_ESTADISTICA.md`](./TRANSPARENCIA_CIENTIFICA_Y_ESTADISTICA.md)
+**Ember harmonizes NASA's MODIS and VIIRS active-fire records into a single series from 2000 to today,<br>and turns it into early-warning alerts that name who to notify.**
 
-> "Ember" is the app name. Change it in `src/lib/env.ts` (`APP_NAME`) and `index.html`.
+<br>
 
-## Run
+<a href="https://nasaspace.site"><img src="https://img.shields.io/badge/Live_app-nasaspace.site-E0612B?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Live app: nasaspace.site"></a>
+<a href="https://github.com/IngeNelsonG/NASA_CHALLENGE_2026/actions/workflows/ci-cd.yml"><img src="https://img.shields.io/github/actions/workflow/status/IngeNelsonG/NASA_CHALLENGE_2026/ci-cd.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI%2FCD" alt="CI/CD status"></a>
+<a href="https://www.spaceappschallenge.org/2026/challenges/harmonization-of-modis-and-viirs-hot-spots/"><img src="https://img.shields.io/badge/NASA_Space_Apps-2026-0B3D91?style=for-the-badge" alt="NASA Space Apps Challenge 2026"></a>
+<a href="https://www.spaceappschallenge.org/2026/find-a-team/ustacode1/?tab=members"><img src="https://img.shields.io/badge/Team-USTACODE-1C1A17?style=for-the-badge" alt="Team USTACODE"></a>
 
-```bash
-npm install
-npm run dev        # http://localhost:5173
-npm run build      # type-check + production build in dist/
-npm run preview    # serve the build
-```
+<img src="https://img.shields.io/badge/Challenge-Harmonization_of_MODIS_and_VIIRS_Hot_Spots-EFE9E0?style=flat-square&labelColor=1C1A17" alt="Challenge: Harmonization of MODIS and VIIRS Hot Spots">
+<img src="https://img.shields.io/badge/Challenge_author-CONAE-EFE9E0?style=flat-square&labelColor=1C1A17" alt="Challenge author: CONAE">
+<img src="https://img.shields.io/badge/Languages-English_·_Español-EFE9E0?style=flat-square&labelColor=1C1A17" alt="English and Spanish">
 
-Node 20+ recommended.
+<br><br>
 
-## Environment variables
+[**Open the app**](https://nasaspace.site) &nbsp;·&nbsp;
+[**Watch the 30-second demo**](https://youtu.be/uZ3F6bVv9zg) &nbsp;·&nbsp;
+[**How it works**](https://nasaspace.site/metodologia) &nbsp;·&nbsp;
+[**Developer guide**](docs/development/setup.md) &nbsp;·&nbsp;
+[**Scientific transparency (ES)**](docs/methodology/TRANSPARENCIA_CIENTIFICA_Y_ESTADISTICA.md)
 
-| Variable | Default | Meaning |
+<br>
+
+<a href="https://nasaspace.site">
+  <img src="docs/assets/ember-tour.gif" alt="A 12-second tour of Ember: the globe, Colombia's fires, the burn calendar, the early-warning monitor, a territory alert and the subscription form" width="88%">
+</a>
+
+<sub>The whole app in 12 seconds, recorded at <a href="https://nasaspace.site">nasaspace.site</a>.</sub>
+
+</div>
+
+<br>
+
+<table>
+<tr>
+<td align="center"><h3>26 years</h3><sub>Nov 2000 → today,<br>one comparable series</sub></td>
+<td align="center"><h3>2.1 M</h3><sub>fire detections in the<br>Colombia point archive</sub></td>
+<td align="center"><h3>234</h3><sub>countries with monthly<br>harmonized totals</sub></td>
+<td align="center"><h3>4,167</h3><sub>states, provinces and<br>departments</sub></td>
+<td align="center"><h3>≈100</h3><sub>official authority portals<br>in the alert directory</sub></td>
+<td align="center"><h3>249 ✓</h3><sub>backend tests,<br>90.8 % coverage</sub></td>
+</tr>
+</table>
+
+## Contents
+
+- [The problem](#-the-problem)
+- [What Ember does](#-what-ember-does)
+- [How it works](#-how-it-works)
+- [From anomaly to alert](#-from-anomaly-to-alert)
+- [Gallery](#-gallery)
+- [Data sources](#%EF%B8%8F-data-sources)
+- [Built with](#%EF%B8%8F-built-with)
+- [Architecture](#%EF%B8%8F-architecture)
+- [Run it locally](#-run-it-locally)
+- [Quality, accessibility and honesty](#-quality-accessibility-and-honesty)
+- [Use of AI](#-use-of-ai)
+- [Team](#-team)
+
+## 🔥 The problem
+
+Two NASA instruments have been watching fires from orbit for a quarter of a century, but their numbers cannot simply be stacked together.
+
+| | **MODIS** | **VIIRS** |
 |---|---|---|
-| `VITE_USE_MOCKS` | `true` | `true`: every `/api/*` call is answered by `src/mocks` with **synthetic** data. `false`: calls go to the backend. |
-| `VITE_API_URL` | *(empty)* | Backend origin without trailing slash, e.g. `http://localhost:8000`. Empty = same origin. |
+| Satellites | Terra (2000→), Aqua (2002→) | Suomi NPP (2012→), NOAA-20, NOAA-21 |
+| Fire pixel | 1 km | 375 m |
+| What changes | — | sees many more, smaller fires: one MODIS pixel can hold several VIIRS detections |
 
-Defaults live in `.env` (no secrets). Override them in `.env.local`, which is git-ignored.
+Plot raw detection counts from 2000 to 2026 and fire seems to "explode" in 2012. It didn't; the sensor changed. Any year-to-year comparison, trend or alert threshold built on mixed counts is wrong from the start.
 
-### Turning the mocks off and connecting the backend
+### Built for the world, deepest in Colombia
+
+Ember works for every country on Earth: the harmonized record, the seasonal anomalies and the alerts cover 234 countries. We are a Colombian team, so we went deepest at home: every detection since 2000, alerts for each department, and the national and regional authorities that respond (UNGRD, IDEAM and the regional autonomous corporations). Colombia is our proof that a global record can become local action; the same method is ready for any country.
+
+## ✨ What Ember does
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/assets/screenshots/03-explorer-colombia.webp" alt="Explorer: Colombia selected on the globe with thousands of active-fire points, NASA GIBS satellite image and timeline">
+<p><b>Explore any place on Earth.</b> Search a country, region or municipality, or draw a box. The 3D globe shows every detection, the real satellites in orbit and the day/night line; the side panel shows NASA GIBS imagery of that very day.</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/assets/screenshots/04-calendar.webp" alt="Burn-activity calendar: years as rows and months as columns, coloured by harmonized fire activity">
+<p><b>See when it burns.</b> A burn-activity calendar (day, week or month) of the harmonized series, with the typical year and its 10th–90th percentile band. Gaps with no satellite observation are hatched, never shown as zero.</p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/assets/screenshots/05-early-warning-monitor.webp" alt="Global early-warning monitor listing countries and Colombian departments on critical alert, with their variation in sigma and government contact">
+<p><b>Know when it is unusual.</b> A global early-warning monitor ranks countries and Colombian departments by how far they are from their own normal for that season, in standard deviations (σ).</p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/assets/screenshots/07-plain-language-alert.webp" alt="Plain-language fire situation for Germany: critical alert, recommended actions and competent authorities">
+<p><b>Know who to call.</b> Each alert becomes a plain-language bulletin (CAP-1.2 style) with recommended actions and the competent civil-protection or environmental authority, and anyone can subscribe to email alerts.</p>
+</td>
+</tr>
+</table>
+
+Also inside: an **El Niño / La Niña panel** (NOAA ONI, shown as context, never as a proven cause), **CSV downloads** of exactly what is on screen, an **AI help assistant** (clearly labelled), and a dedicated **[methodology page](https://nasaspace.site/metodologia)** with every formula, assumption and limit.
+
+## 🧪 How it works
+
+```mermaid
+flowchart LR
+    A["🛰️ NASA FIRMS<br/>MODIS C6.1 · 1 km<br/>2000 →"] --> C
+    B["🛰️ NASA FIRMS<br/>VIIRS · 375 m<br/>2012 →"] --> C
+    C["Quality filter<br/>vegetation fires only"] --> D["Aggregate<br/>daily · monthly · FRP"]
+    D --> E["Cross-calibrate<br/>k = VIIRS / MODIS<br/>on overlap months"]
+    E --> F["Harmonize<br/>inverse-variance blend<br/>MODIS-equivalent + 90 % CI"]
+    F --> G["Seasonal anomaly<br/>vs the same season<br/>across 26 years"]
+    G --> H["🚨 Alerts<br/>country · department<br/>authority · email"]
+    F --> I["🌍 Globe · calendar · CSV"]
+```
+
+1. **Data.** NASA FIRMS standard products for MODIS Collection 6.1 (Terra, Aqua) and VIIRS 375 m (S-NPP, NOAA-20, NOAA-21), plus FIRMS near-real-time data for the most recent days.
+2. **Filter.** Only vegetation fires; volcanoes, gas flares, industrial sources and low-confidence detections are removed.
+3. **Aggregate.** Daily and monthly detection counts and mean fire radiative power (FRP, MW) per country and subdivision.
+4. **Cross-calibrate.** The VIIRS/MODIS ratio $k$ is measured on the months where both sensors exist (from February 2012), shrunk toward a prior when the overlap is short:
+
+$$w = \frac{n}{n+24}, \qquad k_{\text{post}} = w\,k_{\text{obs}} + (1-w)\,k_{\text{prior}}$$
+
+5. **Harmonize.** MODIS ($M$) and rescaled VIIRS ($V/k$) are merged by inverse variance, with a 90 % interval. The result is in **MODIS-equivalent detections**, so 2005 and 2023 are on the same scale:
+
+$$H = \frac{w_M\,M + w_V\,V/k}{w_M + w_V}$$
+
+Before 2012 only MODIS existed, and the record says so.
+
+<details>
+<summary><b>The physics behind a fire pixel</b> (Planck, Wien, FRP)</summary>
+<br>
+
+Fires at 600–1200 K peak in the mid-infrared, far from the ~300 K background that peaks near 10 µm (Wien's law), which is why both sensors detect fire around 3.7–4 µm:
+
+$$\lambda_{\max} = \frac{2897.8\ \mu\text{m·K}}{T}$$
+
+Fire radiative power comes from the mid-infrared excess over the background (Wooster et al., 2003):
+
+$$\text{FRP} = \frac{\sigma}{a}\sum \left(L_{\text{MIR}} - L_{\text{bg}}\right)$$
+
+Full derivations, including Planck's law and the role of GOES geostationary data, are in the [scientific transparency document](docs/methodology/TRANSPARENCIA_CIENTIFICA_Y_ESTADISTICA.md) and on the [methodology page](https://nasaspace.site/metodologia).
+</details>
+
+## 🚨 From anomaly to alert
+
+A busy month in the normal dry season is not news. Ember compares each period **with the same time of year across the whole record**, on a log scale:
+
+$$Y(t) = \ln\bigl(1 + H(t)\bigr), \qquad z(t) = \frac{Y(t) - \mu_s(m)}{\max\bigl(\sigma_s(m),\ 0.25\bigr)}$$
+
+and backs it with a robust score that a single extreme year cannot distort:
+
+$$z_{\text{rob}} = \frac{X - M_m}{\max\bigl(\text{MAD}_m,\ \text{IQR}/1.349,\ 1\bigr)}, \qquad \text{MAD}_m = 1.4826\ \text{median}\,|X - M_m|$$
+
+When activity breaks the norm, Ember raises an alert by **country** or **Colombian department**, writes a plain-language bulletin, names the authority from a directory of about 100 official portals (UNGRD, IDEAM and the regional autonomous corporations in Colombia, and national agencies worldwide), and sends it to email subscribers.
+
+## 📸 Gallery
+
+<table>
+<tr>
+<td width="50%"><img src="docs/assets/screenshots/01-hero.webp" alt="Landing page: EMBER wordmark over a night Earth with fires"></td>
+<td width="50%"><img src="docs/assets/screenshots/02-globe.webp" alt="The 3D Earth with satellite orbits"></td>
+</tr>
+<tr>
+<td align="center"><sub>Landing: twenty-six years of fire, one comparable record</sub></td>
+<td align="center"><sub>One WebGL Earth shared by the intro, the landing and the explorer</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/assets/screenshots/06-territory-detail.webp" alt="Territory detail for Germany: typical critical season March to September and most unusual periods in sigma"></td>
+<td width="50%"><img src="docs/assets/screenshots/08-subscribe.webp" alt="Subscribe to fire early-warning bulletins form"></td>
+</tr>
+<tr>
+<td align="center"><sub>Each territory: its typical fire season and most unusual months</sub></td>
+<td align="center"><sub>Email early-warning bulletins by country or department</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/assets/screenshots/09-team.webp" alt="Team USTACODE section"></td>
+<td width="50%"><img src="docs/assets/screenshots/10-footer.webp" alt="Footer with CSV downloads and data sources"></td>
+</tr>
+<tr>
+<td align="center"><sub>Team USTACODE, Universidad Santo Tomás</sub></td>
+<td align="center"><sub>Downloads of what is on screen, and every data source credited</sub></td>
+</tr>
+</table>
+
+## 🛰️ Data sources
+
+| Source | Used for |
+|---|---|
+| [**NASA FIRMS**](https://firms.modaps.eosdis.nasa.gov/) — MODIS C6.1 and VIIRS 375 m active fire (standard archive and near real time, [Area API](https://firms.modaps.eosdis.nasa.gov/api/area/)) | every detection, count and FRP value |
+| [**NASA GIBS**](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) / [**Worldview**](https://worldview.earthdata.nasa.gov/) | satellite imagery of the selected day |
+| [**NASA Blue Marble**](https://visibleearth.nasa.gov/collection/1484/blue-marble) / [**Black Marble**](https://earthobservatory.nasa.gov/features/NightLights) | Earth day and night textures |
+| [**CONAE**](https://www.argentina.gob.ar/ciencia/conae) | author of the challenge |
+| [**NOAA CPC — Oceanic Niño Index**](https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt) | El Niño / La Niña context |
+| [**CelesTrak**](https://celestrak.org/) | satellite orbital elements (TLE) |
+| [**Natural Earth**](https://www.naturalearthdata.com/) via [world-atlas](https://github.com/topojson/world-atlas) | country and subdivision boundaries |
+
+<sub><i>We acknowledge the use of data from NASA's Fire Information for Resource Management System (FIRMS), part of NASA's Earth Science Data and Information System (ESDIS).</i></sub>
+
+## 🛠️ Built with
+
+<p>
+<img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
+<img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React">
+<img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite">
+<img src="https://img.shields.io/badge/three.js-000000?style=for-the-badge&logo=threedotjs&logoColor=white" alt="three.js">
+<img src="https://img.shields.io/badge/D3-F9A03C?style=for-the-badge&logo=d3dotjs&logoColor=white" alt="D3">
+<img src="https://img.shields.io/badge/GSAP-0AE448?style=for-the-badge&logo=greensock&logoColor=black" alt="GSAP">
+<img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind CSS">
+<img src="https://img.shields.io/badge/TanStack_Query-FF4154?style=for-the-badge&logo=reactquery&logoColor=white" alt="TanStack Query">
+<br>
+<img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+<img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
+<img src="https://img.shields.io/badge/pandas-150458?style=for-the-badge&logo=pandas&logoColor=white" alt="pandas">
+<img src="https://img.shields.io/badge/Apache_Arrow-0E3A5B?style=for-the-badge&logo=apache&logoColor=white" alt="Apache Arrow / Parquet">
+<img src="https://img.shields.io/badge/Pydantic-E92063?style=for-the-badge&logo=pydantic&logoColor=white" alt="Pydantic">
+<img src="https://img.shields.io/badge/uv-DE5FE9?style=for-the-badge&logo=uv&logoColor=white" alt="uv">
+<br>
+<img src="https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel">
+<img src="https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions">
+<img src="https://img.shields.io/badge/Cloudflare_DNS-F38020?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Cloudflare DNS">
+<img src="https://img.shields.io/badge/pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white" alt="pytest">
+<img src="https://img.shields.io/badge/Ruff-D7FF64?style=for-the-badge&logo=ruff&logoColor=black" alt="Ruff">
+</p>
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart LR
+    subgraph Browser
+        UI["React UI<br/>calendar · alerts · i18n"]
+        GL["three.js Earth<br/>one WebGL scene"]
+        WK["Web Worker<br/>parsing · binning · CSV"]
+    end
+    subgraph Vercel["Vercel · nasaspace.site"]
+        CDN["Static site<br/>Vite build"]
+        API["Python Function<br/>FastAPI · /api/*"]
+        PQ[("Parquet archive<br/>2.1 M detections<br/>234 countries")]
+    end
+    UI --> CDN
+    UI -- "/api/*" --> API
+    API --> PQ
+    API --> FIRMS["NASA FIRMS<br/>Area API"]
+    API --> ONI["NOAA ONI"]
+    API --> LLM["LLM via Groq<br/>AI-labelled text"]
+    GL --> GIBS["NASA GIBS"]
+```
+
+- **One domain, no CORS.** The Vite site and the FastAPI backend ship together on Vercel; `/api/*` is a Python Function bundled with the processed data.
+- **One WebGL Earth.** The intro, the landing and the explorer share a single renderer; hotspots are one GPU draw call; frames render only while something moves.
+- **Heavy work off the main thread.** Fetching, parsing, binning and CSV export run in a Web Worker; the 3D stack is lazy-loaded behind a ~120 KB first paint.
+- **Graceful fallbacks.** Without WebGL2 or on low-memory devices the app switches to a 2D Equal Earth map.
+
+Details: [developer guide → architecture](docs/development/setup.md#architecture).
+
+## 🚀 Run it locally
 
 ```bash
-cp .env.example .env.local   # VITE_USE_MOCKS=false, VITE_API_URL=http://localhost:8000
-npm run dev
+git clone https://github.com/IngeNelsonG/NASA_CHALLENGE_2026.git
+cd NASA_CHALLENGE_2026
+npm install
+npm run dev            # http://localhost:5173, with synthetic demo data
 ```
 
-Nothing else changes: `src/lib/api.ts` is the only network entry point, and the mock layer returns real `Response` objects, so parsing, the worker and the UI run the same code in both modes. While mocks are on, the header shows a **Demo data** badge.
+To use the real data, start the API (Python 3.12+ and [uv](https://docs.astral.sh/uv/)) and point the frontend at it:
 
-## API contract
-
-Types are in `src/lib/types.ts` and must be matched exactly.
-
-| Endpoint | Returns |
-|---|---|
-| `GET /api/aoi/search?q=` | `AOI[]` |
-| `GET /api/calendar?aoi=&from=&to=&resolution=day\|week\|month` | `CalendarResponse` |
-| `GET /api/hotspots?bbox=W,S,E,N&date=YYYY-MM-DD&sensor=modis\|viirs` (or `from`/`to`) | `Hotspot[]` (with optional `acqDate`) |
-| `GET /api/hotspots/coverage?bbox=&from=&to=` | `HotspotCoverage` — where the points come from |
-| `GET /api/aoi/geometry?aoi=` | `AoiGeometry` — real outline of the area (countries come back empty and are drawn from Natural Earth on the client) |
-| `GET /api/anomalies?aoi=` | `Anomaly[]` |
-| `GET /api/satellites/tle` | `TLE[]` |
-| `POST /api/analyst` | SSE stream (see below) |
-
-Things the frontend assumes beyond the type definitions — please confirm or tell us to change them:
-
-- **`null` means "no observation"**, never zero. Null cells are drawn hatched.
-- **Custom areas** (drawn rectangle, clicked point) are sent as `aoi=bbox:W,S,E,N`. The backend needs to accept that id form.
-- **Week bins** start on 1 January of each year (`week = floor((doy − 1) / 7)`, 53 per year); `date` is the first day of the bin. Month bins use the first of the month.
-- **`climatology[].doy`** is the first day-of-year of each bin at the requested resolution, and describes the harmonized series.
-- **`anomalyZ`** is omitted for the bin still in progress (current week/month).
-- **Hotspots for a month or year** are fetched one day at a time (8 requests in parallel) because the contract takes a single `date`. A year is ~730 requests; if that is too heavy, add `from`/`to` to the endpoint and change the loop in `src/lib/data.worker.ts`.
-- **Analyst SSE**: each event is a `data:` line. `{"delta":"text"}` (or `{"text":"…"}`, or plain text) is appended to the answer; the final event is `{"highlights":[{"date","reason"}]}`. `[DONE]` is ignored. The parser is `src/lib/sse.ts`.
-- **TLEs** in `src/mocks/tle.json` are a CelesTrak snapshot from 2026-11-14. The backend should serve fresh ones; positions degrade as a TLE ages.
-
-## Fire points outside Colombia
-
-The backend's point archive (`backend/data/processed/detections.parquet`) only covers Colombia's box; every other country and subdivision is stored as **monthly totals**. So, out of the box:
-
-- Colombia (country, departments, presets): points on the globe, clipped to the real outline.
-- Anywhere else: the calendar works (by month), the left-hand satellite image shows NASA's own fire detections for that day (NASA GIBS, no key), and a note explains that there are no points.
-
-To get **points worldwide**, give the backend a NASA FIRMS MAP_KEY (free, <https://firms.modaps.eosdis.nasa.gov/api/map_key/>) in `backend/.env`:
-
-```
-BRASA_FIRMS_MAP_KEY=your-key
+```bash
+cd backend && uv sync && uv run uvicorn brasa.main:app --port 8000
+# in another terminal, from the repository root
+cp .env.example .env.local && npm run dev
 ```
 
-Points outside Colombia are then fetched live from the FIRMS Area API (standard archive for older days, near-real-time for the last ~3 months), cached in memory, for spans up to 62 days (timeline set to *Day* or *Month*). FIRMS allows 5000 requests per 10 minutes per key; one month is ~14 requests.
+Environment variables, the API contract, deployment and CI are in the **[developer guide](docs/development/setup.md)**.
 
-## Deployment (everything on Vercel)
+<details>
+<summary><b>Repository layout</b></summary>
 
-Live at **<https://nasaspace.site>** (`www.nasaspace.site` redirects there; DNS on Cloudflare in *DNS only* mode, not proxied).
-
-**CI/CD** — [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml):
-
-- Every pull request and every push runs the checks: frontend typecheck + build (`npm run build`) and backend `ruff check`, `mypy src` and `pytest` (coverage ≥ 80 %).
-- A push to `main` deploys to production **only after the checks pass** (`vercel deploy --prod` from the workflow). Vercel's own Git deploys are off for `main` (`git.deploymentEnabled` in `vercel.json`); other branches still get Vercel preview URLs.
-- The deploy needs the repository secret `VERCEL_TOKEN` (Vercel → Account Settings → Tokens). The project and team IDs are in the workflow; they are not secret.
-- To redeploy without a new commit: Actions → CI/CD → *Run workflow* on `main`.
-
-One Vercel project serves both halves under the same domain:
-
-- the Vite site (`npm run build` → `dist`);
-- the FastAPI backend as a Python Vercel Function, `api/index.py`, which mounts `backend/src/brasa` with the data in `backend/data`. `vercel.json` sends every `/api/...` request to it and bundles those folders; its dependencies are in the root `requirements.txt` (~320 MB unzipped with the data, under Vercel's 500 MB limit for Python).
-
-Same origin, so no CORS and no `VITE_API_URL`. In Vercel → *Settings* → *Environment Variables*:
-
-| Variable | Needed for |
-|---|---|
-| `BRASA_FIRMS_MAP_KEY` | fire points outside Colombia (live NASA FIRMS) |
-| `BRASA_LLM_BASE_URL`, `BRASA_LLM_API_KEY`, `BRASA_LLM_MODEL` | optional AI wording in the help assistant |
-
-Do **not** set `VITE_API_URL` or `VITE_USE_MOCKS` (the defaults are right). Server-side variables never reach the browser: only `VITE_*` ones are written into the bundle.
-
-Notes:
-
-- **Cold start.** A new function instance loads the archive in ~10 s; while it does, the page shows a "connecting to the data server" note. Vercel keeps instances warm while there is traffic.
-- **Responses are capped at 20 000 points** (≈3.3 MB) to stay under Vercel's 4.5 MB response limit.
-- **Background refreshes** (near-real-time FIRMS feed, calendar warm-up) are best effort on serverless: they run while an instance is alive.
-- **Hosting the API elsewhere** (any Docker host, using `backend/Dockerfile`) still works: set `VITE_API_URL` to its origin and `BRASA_CORS_ALLOWED_ORIGINS` / `BRASA_CORS_ALLOWED_ORIGIN_REGEX` on the API.
-
-## What the mock data is
-
-`src/mocks/model.ts` is a seeded generator, not a sample of FIRMS. It reproduces the *shape* of the problem: a fire season, year-to-year variability, multi-day episodes, sensor start dates (Terra 2000, Aqua 2002, S-NPP 2012, NOAA-20 2018, NOAA-21 2024), a few outages and gaps. Calendar counts and hotspot points come from the same generator, so they agree. **No number shown in demo mode is a measurement**, including the VIIRS/MODIS ratio.
-
-## Architecture
-
+```text
+.
+├── src/                     React + TypeScript frontend
+│   ├── app/                 shell, routing, data loaders, i18n (EN/ES)
+│   ├── scenes/              the WebGL Earth: globe, hotspots, satellites, camera
+│   ├── features/            landing, explorer, calendar, anomalies, methodology, assistant…
+│   ├── lib/                 API client, worker, orbit propagation, colour scales
+│   └── mocks/               synthetic backend for offline demos
+├── backend/                 FastAPI service (package "brasa")
+│   ├── src/brasa/           ingestion · harmonization · alerts · api
+│   ├── data/                processed FIRMS archive (Parquet) and context layers
+│   ├── scripts/             data pipeline
+│   └── tests/               249 tests, coverage ≥ 80 % enforced
+├── api/index.py             Vercel entry point for the backend
+├── docs/
+│   ├── development/         developer guide
+│   ├── methodology/         scientific transparency document (ES)
+│   └── assets/              screenshots and the tour GIF
+├── public/                  textures, brand assets, favicon
+└── .github/workflows/       CI/CD: checks on every PR, production deploy from main
 ```
-src/
-  app/          App shell, data loaders (TanStack Query), i18n + locales (EN default, ES)
-  intro/        Intro sequence (GSAP timeline)
-  scenes/       The single WebGL scene: Globe (Earth + Atmosphere), Hotspots, Satellites, Overlays, CameraRig
-  features/
-    landing/    Hero, Problem, Header, OrbitNav (scroll satellites), Credits
-    explorer/   Globe/map stage, layers, timeline, 2D map, pick panel
-    aoi/        Area search
-    calendar/   Burn-activity calendar (canvas)
-    anomalies/  methodology/  analyst/
-  components/ui/
-  lib/          api client, worker, satellite propagation, colour scales, geo/sun maths
-  mocks/        Mock backend
-  store/        Zustand stores
-```
+</details>
 
-- **One WebGL renderer.** Any DOM element can become a "stage" (`useGlobeStage`), so the intro, the hero and the explorer share the same Earth. On desktop the canvas is fixed behind the page and a projection view-offset keeps the globe on the active stage. On touch and narrow screens the canvas is *docked*: moved over the active stage in page coordinates so it scrolls natively (a fixed canvas re-aimed on every scroll frame lags behind the finger), with ambient motion capped at 30 fps.
-- **Earth-fixed frame.** The Earth never rotates; the camera orbits it. Satellites (satellite.js, SGP4 → ECEF) and the sun direction (day/night terminator) are computed in that frame from a simulated UTC clock (×1 / ×60 / ×600).
-- **Rendering on demand.** `frameloop="demand"`; `CameraRig` requests frames only while something moves (satellites orbit on a ×200 simulated clock; the day/night terminator follows the real sun), plus a 4 fps heartbeat. Nothing renders when the tab is hidden or no stage is on screen.
-- **Hotspots** are one `Points` draw call with a shader; density hexagons are one `InstancedMesh`.
-- **Worker.** Fetching, parsing, typed-array packing, hex binning and CSV export run in `src/lib/data.worker.ts`.
-- **2D fallback.** Without WebGL2, or on low-memory devices, the app uses the Equal Earth canvas map (`Map2D`).
-- **No area selected = the whole world.** The default area is the virtual `world` id: the globe draws no outline and no points, and the calendar, anomalies and transparency sections use every country summed by month (`GET /api/calendar?aoi=world`).
-- **Code splitting.** First paint is the star field (2D canvas) and the logo, ~120 KB gzip of JS+CSS (React, GSAP core, satellite.js, TanStack Query). three.js, the scene, the landing and the calendar are lazy chunks.
+## ✅ Quality, accessibility and honesty
 
-## Brand assets
+- **CI/CD on every change.** Frontend type-check and build; backend `ruff`, `mypy` and `pytest` (249 tests, 90.8 % coverage, ≥ 80 % enforced). Production deploys only after every check passes.
+- **Accessible.** Every control is keyboard-reachable with visible focus; the globe and the calendar have keyboard controls; the calendar has a table alternative for screen readers; `prefers-reduced-motion` is respected; English and Spanish.
+- **Honest with data.** Missing observations are hatched, never zero. Uncertainty is always shown. A detection is a satellite pixel that saw fire at overpass time, not burned area and not a count of fires; the app says so. El Niño is context, never a cause.
+- **Known limits.** Point-level detections are archived for Colombia; elsewhere the calendar uses monthly totals, with live FIRMS points for recent spans. Earth textures stop at 4K. Areas are rectangles, not free polygons.
 
-Put the official NASA Space Apps Challenge logo at `public/brand/space-apps-logo.svg` (from <https://www.spaceappschallenge.org/brand>). Until it exists the intro shows plain text instead. The intro only fades and uniformly scales the logo. Colours and fonts in `tailwind.config.ts` follow the Space Apps palette from memory — check the hex values against the current brand guide.
+## 🤖 Use of AI
 
-## Accessibility
+- **Code and documentation.** The team used Claude (Anthropic) as a coding assistant for parts of the frontend, backend, tests, CI/CD configuration and documentation. Every change was reviewed, tested and deployed by the team.
+- **In the app.** The help assistant and the period explanations are written at runtime by a large language model through the Groq API and are labelled **"Written by AI (Groq)"** on screen. Without the model, deterministic templates are used. Every number comes from the data, never from the model.
+- **Demo video.** Real screen recording of the live site, narrated by a team member; the editing (subtitles, frame, QR code) was scripted with AI assistance.
+- No AI-generated images, and no NASA logos or insignia were generated or modified.
 
-Keyboard: the globe (arrows, `+`/`−`, Enter), the calendar grid (arrows, Home/End, Enter) and every control are reachable; focus is always visible. The calendar has a year × month table alternative ("View as table", also exposed to screen readers). `prefers-reduced-motion` skips the intro and stops auto-rotation.
+## 👥 Team
 
-## Known limits
+<div align="center">
 
-- Earth textures stop at 4K, so the surface is soft at the highest zoom levels; borders are Natural Earth 1:50m, countries only (no departments).
-- Area drawing supports rectangles, not free polygons.
-- Verified in Chrome at 360, 768, 1280 and 1920 px with software WebGL. Not yet measured: Lighthouse scores, 60 fps with 100k points on real GPUs, Safari/Firefox, real phones.
+**USTACODE** · four students from Universidad Santo Tomás, at the Bogotá local event of the NASA Space Apps Challenge 2026.
 
-## Data credits
+| Nelson Felipe Gonzalez Gordillo | Jean Carlos Reyes Delgadillo | Daniel Esteban Alarcón Rojas | Edgard Leonardo Patiño Largo |
+|:---:|:---:|:---:|:---:|
 
-- **NASA FIRMS / LANCE** — MODIS (Collection 6.1) and VIIRS 375 m active-fire products. *We acknowledge the use of data from NASA's Fire Information for Resource Management System (FIRMS) (https://earthdata.nasa.gov/firms), part of NASA's Earth Science Data and Information System (ESDIS).*
-- **CONAE** — author of the challenge.
-- **CelesTrak** — orbital elements (TLE).
-- **Natural Earth** via `world-atlas` — country boundaries.
-- **NASA Blue Marble / Black Marble** — Earth textures (files taken from the three.js examples; rebuild with `scripts/build-textures.mjs`).
+<br>
 
-Independent hackathon project; not an official NASA or CONAE product.
+<a href="https://santototunja.edu.co/"><img src="public/brand/usta-logo.png" alt="Universidad Santo Tomás" height="84"></a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<a href="https://www.spaceappschallenge.org/2026/find-a-team/ustacode1/?tab=members"><img src="public/brand/space-apps-logo.png" alt="NASA Space Apps Challenge" height="84"></a>
+
+<br><br>
+
+<sub>Independent hackathon project for the NASA Space Apps Challenge 2026; not an official NASA or CONAE product.</sub>
+
+<br>
+
+[⬆ Back to top](#ember)
+
+</div>

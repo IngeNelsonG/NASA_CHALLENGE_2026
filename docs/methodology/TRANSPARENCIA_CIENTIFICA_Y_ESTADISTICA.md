@@ -26,7 +26,7 @@ El monitoreo de incendios activos se sustenta en la física de radiación de cue
 
 ## 2. Armonización Multi-Sensor MODIS + VIIRS (Calibración y Fusión)
 
-Implementado en [`backend/src/brasa/harmonization/calibrate.py`](backend/src/brasa/harmonization/calibrate.py) y [`backend/src/brasa/api/ember_routes.py`](backend/src/brasa/api/ember_routes.py):
+Implementado en [`backend/src/brasa/harmonization/calibrate.py`](../../backend/src/brasa/harmonization/calibrate.py) y [`backend/src/brasa/api/ember_routes.py`](../../backend/src/brasa/api/ember_routes.py):
 
 1. **Filtrado determinista homogéneo**: se conservan únicamente detecciones de fuego en vegetación (`type = 0` en archivo científico estándar) excluyendo fuentes industriales/teas estáticas (`static_sources.csv`) y bajas confianzas. Los meses sin cobertura satelital previa al lanzamiento quedan en **`null`** (no observados), y los meses observados con cero incendios permanecen en **`0`**.
 2. **Exclusión de enero de 2012 del ajuste de traslape**: Suomi NPP VIIRS comenzó ciencia operativa el **20 de enero de 2012** (solo 12 días de operación). Incluir ese mes parcial sesgaría a la baja la razón $k = \text{VIIRS}/\text{MODIS}$. La calibración solo utiliza meses de traslape completo desde **`2012-02` en adelante** (`VIIRS_FULL_START_MONTH`).
@@ -41,7 +41,7 @@ Implementado en [`backend/src/brasa/harmonization/calibrate.py`](backend/src/bra
 
 ## 3. Metodología Estadística para Detección de Anomalías
 
-Implementado en `_assign_log_z_scores`, `_detect_anomalies_from_cells` ([`ember_routes.py`](backend/src/brasa/api/ember_routes.py)) y [`detector.py`](backend/src/brasa/alerts/detector.py):
+Implementado en `_assign_log_z_scores`, `_detect_anomalies_from_cells` ([`ember_routes.py`](../../backend/src/brasa/api/ember_routes.py)) y [`detector.py`](../../backend/src/brasa/alerts/detector.py):
 
 ### A. Transformación Estabilizadora de Varianza y $z$-Score Estacional (Serie Temporal)
 Los conteos de incendios siguen distribuciones altamente asimétricas a la derecha (heavy-tailed). Antes de estandarizar, se aplica:
@@ -54,7 +54,7 @@ Con esto se agrupan episodios consecutivos (Run-Length Encoding) cuando $z \ge 1
 - **Extreme**: $|z| \ge 2{,}5$
 
 ### B. Estadística Robusta No Paramétrica y Regla de Línea Base Cero (Motor de Alertas)
-En [`detector.py`](backend/src/brasa/alerts/detector.py), el mes de referencia se evalúa respecto al historial del mismo calendario mensual ($m \in \{1\dots 12\}$) usando dos familias complementarias:
+En [`detector.py`](../../backend/src/brasa/alerts/detector.py), el mes de referencia se evalúa respecto al historial del mismo calendario mensual ($m \in \{1\dots 12\}$) usando dos familias complementarias:
 1. **Paramétrica log-normal**: $z$-score logarítmico estacional $z$.
 2. **Robusta no paramétrica** (resistente a megaincendios extremos en el histórico):
    - Mediana climatológica $M_m$, cuartiles $Q_{25}$, $Q_{75}$, Rango Intercuartílico ($\text{IQR} = Q_{75} - Q_{25}$) y percentil 90 ($p_{90}$).
@@ -82,8 +82,8 @@ El motor evalúa determinísticamente cuatro niveles de severidad (`CRITICAL`, `
 - **VIGILANCIA (`WATCH`)**: $(\hat{H} \ge 3 \land (z \ge 1{,}0 \lor R \ge 1{,}35 \lor (\text{ACCELERATING} \land \text{EL\_NINO})))$ o brote NRT $\ge 200\,\%$.
 
 ### Enrutamiento a Autoridades (`authorities.py`) y Exploración en el Frontend
-- **Colombia (33 departamentos completos)**: mapeo automático hacia la **UNGRD**, **IDEAM**, **DNBC**, el respectivo **CDGRD** departamental y la Corporación Autónoma Regional (**CAR / CORMACARENA / CORPOAMAZONIA / CDA / CORPORINOQUIA / CORANTIOQUIA / CRC / etc.**) competente en [`backend/src/brasa/alerts/authorities.py`](backend/src/brasa/alerts/authorities.py).
-- **Cobertura Global y Detección de Ubicación**: [`GET /api/alerts/overview`](backend/src/brasa/api/ember_routes.py) evalúa países a nivel mundial y los 33 departamentos de Colombia. En la interfaz ([`Anomalies.tsx`](src/features/anomalies/Anomalies.tsx)), la aplicación identifica el país del visitante (y permite ubicación GPS exacta opcional) para mostrar inmediatamente si existen alertas en su territorio, además de un monitor interactivo por país y departamento.
+- **Colombia (33 departamentos completos)**: mapeo automático hacia la **UNGRD**, **IDEAM**, **DNBC**, el respectivo **CDGRD** departamental y la Corporación Autónoma Regional (**CAR / CORMACARENA / CORPOAMAZONIA / CDA / CORPORINOQUIA / CORANTIOQUIA / CRC / etc.**) competente en [`backend/src/brasa/alerts/authorities.py`](../../backend/src/brasa/alerts/authorities.py).
+- **Cobertura Global y Detección de Ubicación**: [`GET /api/alerts/overview`](../../backend/src/brasa/api/ember_routes.py) evalúa países a nivel mundial y los 33 departamentos de Colombia. En la interfaz ([`Anomalies.tsx`](../../src/features/anomalies/Anomalies.tsx)), la aplicación identifica el país del visitante (y permite ubicación GPS exacta opcional) para mostrar inmediatamente si existen alertas en su territorio, además de un monitor interactivo por país y departamento.
 
 ---
 
@@ -103,6 +103,6 @@ Al evaluar la integración con imágenes NOAA/NESDIS GOES (como el enlace de Dis
 ## 6. Ciclo de Vida Autónomo (2026 → 2027, 2028+)
 
 La arquitectura está diseñada para operar continuamente sin fechas fijas quemadas:
-1. **Ventanas dinámicas**: tanto las consultas del calendario (`to=todayIso()`) como los endpoints del backend (`date.today()`) y el script [`download_firms_archive.py`](backend/scripts/download_firms_archive.py) (`--last current_year - 1`) avanzan automáticamente con el reloj UTC del sistema.
-2. **Actualización NRT automática cada 3 horas**: [`RecentSource`](backend/src/brasa/ingestion/recent.py) descarga cada 3 horas los archivos públicos LANCE 7-day de **Suomi NPP, NOAA-20 y NOAA-21** y los inyecta tanto en el explorador espacial, como en los calendarios recientes (`_merge_nrt_viirs_counts`) y en las alertas CAP-1.2, sin alterar la integridad de los datos históricos archivados.
-3. **Consolidación anual Science Quality (SP)**: al finalizar cada año calendario (2026, 2027, 2028…), [`download_firms_archive.py`](backend/scripts/download_firms_archive.py), [`extend_archive.py`](backend/scripts/extend_archive.py) y [`build_dataset.py`](backend/scripts/build_dataset.py) consolidan los archivos re-procesados estándar de la NASA (`MCD14ML` / `VNP14IMG`). **Único riesgo operacional externo**: eventuales cambios de URL o retiro futuro de MODIS (Terra/Aqua en órbita extendida); por ello la serie está diseñada para sostenerse sobre la constelación VIIRS JPSS (NOAA-20 y NOAA-21) manteniendo la calibración equivalente MODIS.
+1. **Ventanas dinámicas**: tanto las consultas del calendario (`to=todayIso()`) como los endpoints del backend (`date.today()`) y el script [`download_firms_archive.py`](../../backend/scripts/download_firms_archive.py) (`--last current_year - 1`) avanzan automáticamente con el reloj UTC del sistema.
+2. **Actualización NRT automática cada 3 horas**: [`RecentSource`](../../backend/src/brasa/ingestion/recent.py) descarga cada 3 horas los archivos públicos LANCE 7-day de **Suomi NPP, NOAA-20 y NOAA-21** y los inyecta tanto en el explorador espacial, como en los calendarios recientes (`_merge_nrt_viirs_counts`) y en las alertas CAP-1.2, sin alterar la integridad de los datos históricos archivados.
+3. **Consolidación anual Science Quality (SP)**: al finalizar cada año calendario (2026, 2027, 2028…), [`download_firms_archive.py`](../../backend/scripts/download_firms_archive.py), [`extend_archive.py`](../../backend/scripts/extend_archive.py) y [`build_dataset.py`](../../backend/scripts/build_dataset.py) consolidan los archivos re-procesados estándar de la NASA (`MCD14ML` / `VNP14IMG`). **Único riesgo operacional externo**: eventuales cambios de URL o retiro futuro de MODIS (Terra/Aqua en órbita extendida); por ello la serie está diseñada para sostenerse sobre la constelación VIIRS JPSS (NOAA-20 y NOAA-21) manteniendo la calibración equivalente MODIS.
