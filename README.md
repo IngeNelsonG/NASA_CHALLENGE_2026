@@ -24,6 +24,7 @@
 <br><br>
 
 [**Open the app**](https://nasaspace.site) &nbsp;·&nbsp;
+[**Watch the 30-second demo**](https://youtu.be/uZ3F6bVv9zg) &nbsp;·&nbsp;
 [**How it works**](https://nasaspace.site/metodologia) &nbsp;·&nbsp;
 [**Developer guide**](docs/development/setup.md) &nbsp;·&nbsp;
 [**Scientific transparency (ES)**](docs/methodology/TRANSPARENCIA_CIENTIFICA_Y_ESTADISTICA.md)
@@ -77,6 +78,10 @@ Two NASA instruments have been watching fires from orbit for a quarter of a cent
 | What changes | — | sees many more, smaller fires: one MODIS pixel can hold several VIIRS detections |
 
 Plot raw detection counts from 2000 to 2026 and fire seems to "explode" in 2012. It didn't; the sensor changed. Any year-to-year comparison, trend or alert threshold built on mixed counts is wrong from the start.
+
+### Built for the world, deepest in Colombia
+
+Ember works for every country on Earth: the harmonized record, the seasonal anomalies and the alerts cover 234 countries. We are a Colombian team, so we went deepest at home: every detection since 2000, alerts for each department, and the national and regional authorities that respond (UNGRD, IDEAM and the regional autonomous corporations). Colombia is our proof that a global record can become local action; the same method is ready for any country.
 
 ## ✨ What Ember does
 
